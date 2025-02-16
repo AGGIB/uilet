@@ -1,55 +1,57 @@
 import React, { useState } from 'react';
-import { FaWhatsapp, FaQrcode } from 'react-icons/fa';
+import { FaWhatsapp, FaDownload } from 'react-icons/fa';
+import WhatsAppQRModal from './WhatsAppQRModal';
 
 const Export = () => {
-  const [showQRCode, setShowQRCode] = useState(false);
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
 
   return (
-    <div>
-      <h2 className="text-xl font-bold mb-6">Экспорт ассистента</h2>
-      
-      <div className="space-y-6">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold">Экспорт и интеграции</h2>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* WhatsApp интеграция */}
         <div className="border rounded-lg p-4">
-          <div className="flex items-center justify-between p-3">
-            <div className="flex items-center gap-3">
-              <FaWhatsapp className="text-green-500 text-xl" />
-              <div>
-                <h3 className="font-medium">WhatsApp</h3>
-                <p className="text-sm text-gray-600">Подключите ассистента к WhatsApp</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowQRCode(true)}
-              className="px-4 py-2 bg-green-500 text-white rounded-lg"
-            >
-              Подключить
-            </button>
+          <div className="flex items-center gap-3 mb-4">
+            <FaWhatsapp className="text-2xl text-green-500" />
+            <h3 className="text-lg font-semibold">WhatsApp Business</h3>
           </div>
+          <p className="text-gray-600 mb-4">
+            Подключите WhatsApp Business для автоматизации общения с клиентами через ИИ-ассистента
+          </p>
+          <button
+            onClick={() => setShowWhatsAppModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+          >
+            <FaWhatsapp />
+            <span>Подключить WhatsApp</span>
+          </button>
+        </div>
+
+        {/* Экспорт данных */}
+        <div className="border rounded-lg p-4">
+          <div className="flex items-center gap-3 mb-4">
+            <FaDownload className="text-2xl text-blue-500" />
+            <h3 className="text-lg font-semibold">Экспорт данных</h3>
+          </div>
+          <p className="text-gray-600 mb-4">
+            Выгрузите данные о ваших объявлениях и бронированиях в Excel
+          </p>
+          <button
+            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+          >
+            <FaDownload />
+            <span>Скачать отчет</span>
+          </button>
         </div>
       </div>
 
-      {/* QR код модальное окно */}
-      {showQRCode && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
-            <h3 className="text-xl font-bold mb-4">Подключение WhatsApp</h3>
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-64 h-64 bg-gray-100 rounded-lg flex items-center justify-center">
-                <FaQrcode className="text-6xl" />
-              </div>
-              <p className="text-center text-gray-600">
-                Отсканируйте QR-код в приложении WhatsApp для подключения ассистента
-              </p>
-              <button
-                onClick={() => setShowQRCode(false)}
-                className="w-full px-4 py-2 border rounded-lg"
-              >
-                Закрыть
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <WhatsAppQRModal 
+        isOpen={showWhatsAppModal} 
+        onClose={() => setShowWhatsAppModal(false)} 
+      />
     </div>
   );
 };

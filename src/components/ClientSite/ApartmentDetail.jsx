@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FaArrowLeft, FaHeart, FaShare, FaWhatsapp } from 'react-icons/fa';
 import { apartments } from '../../data/apartments';
+import BookingCalendar from '../Calendar/BookingCalendar';
 
 const ApartmentDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [showWhatsApp, setShowWhatsApp] = useState(false);
   const [whatsappNumber, setWhatsappNumber] = useState('');
+  const [selectedDates, setSelectedDates] = useState([]);
+  const [bookedDates] = useState([]); // В реальном приложении загружаем с сервера
   
   // В реальном приложении здесь будет запрос к API
   const apartment = apartments.find(apt => apt.id === parseInt(id));
@@ -22,6 +25,16 @@ const ApartmentDetail = () => {
       return;
     }
     navigate('../payment');
+  };
+
+  const handleDateSelect = (date) => {
+    setSelectedDates(prev => {
+      const dateStr = date.toISOString();
+      if (prev.includes(dateStr)) {
+        return prev.filter(d => d !== dateStr);
+      }
+      return [...prev, dateStr];
+    });
   };
 
   return (
@@ -89,17 +102,28 @@ const ApartmentDetail = () => {
               <p className="text-gray-600">{apartment.description}</p>
             </div>
 
-            <div className="border-t pt-4">
+            <div className="border-t pt-4 mt-4">
+              <h3 className="text-lg font-medium mb-4">Выберите даты</h3>
+              <BookingCalendar
+                selectedDates={selectedDates}
+                onDateSelect={handleDateSelect}
+                bookedDates={bookedDates}
+                isReadOnly={false}
+              />
+            </div>
+
+            <div className="border-t pt-4 mt-4">
               <div className="flex justify-between items-center">
                 <div>
                   <div className="text-gray-500">Стоимость</div>
                   <div className="text-2xl font-bold text-[#2563EB]">
-                    {apartment.price.toLocaleString()} ₸/мес
+                    {apartment.price.toLocaleString()} ₸/сутки
                   </div>
                 </div>
                 <button
                   onClick={handleBooking}
-                  className="px-8 py-3 bg-[#2563EB] text-white rounded-xl hover:bg-opacity-90 transition-colors"
+                  disabled={selectedDates.length === 0}
+                  className="px-8 py-3 bg-[#2563EB] text-white rounded-xl hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Забронировать
                 </button>

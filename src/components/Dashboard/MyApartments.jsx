@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { FaPlus, FaEdit, FaTrash, FaWifi, FaTv, FaParking, 
-  FaSnowflake, FaUtensils, FaWater } from 'react-icons/fa';
+  FaSnowflake, FaUtensils, FaWater, FaCalendar } from 'react-icons/fa';
 
 const AmenityToggle = ({ icon: Icon, label, value, onChange }) => (
   <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer">
@@ -18,6 +18,10 @@ const AmenityToggle = ({ icon: Icon, label, value, onChange }) => (
 const MyApartments = () => {
   const [apartments, setApartments] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [editingApartment, setEditingApartment] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [apartmentToDelete, setApartmentToDelete] = useState(null);
   const [newApartment, setNewApartment] = useState({
     complex: '',
     rooms: '',
@@ -47,6 +51,27 @@ const MyApartments = () => {
     e.preventDefault();
     setApartments(prev => [...prev, { ...newApartment, id: Date.now() }]);
     setShowAddForm(false);
+  };
+
+  const handleEdit = (apartment) => {
+    setEditingApartment(apartment);
+    setShowEditForm(true);
+  };
+
+  const handleDelete = (apartment) => {
+    setApartmentToDelete(apartment);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    try {
+      // TODO: Здесь будет API запрос на удаление
+      setApartments(prev => prev.filter(apt => apt.id !== apartmentToDelete.id));
+      setShowDeleteConfirm(false);
+      setApartmentToDelete(null);
+    } catch (error) {
+      console.error('Error deleting apartment:', error);
+    }
   };
 
   return (
@@ -99,10 +124,16 @@ const MyApartments = () => {
                       <p className="text-lg font-medium mt-2">{apartment.price} ₸/сутки</p>
                     </div>
                     <div className="flex gap-2">
-                      <button className="p-2 text-blue-600 hover:bg-blue-50 rounded">
+                      <button
+                        onClick={() => handleEdit(apartment)}
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+                      >
                         <FaEdit />
                       </button>
-                      <button className="p-2 text-red-600 hover:bg-red-50 rounded">
+                      <button
+                        onClick={() => handleDelete(apartment)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded"
+                      >
                         <FaTrash />
                       </button>
                     </div>
@@ -132,6 +163,259 @@ const MyApartments = () => {
           ))
         )}
       </div>
+
+      {/* Модальное окно подтверждения удаления */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold mb-4">Удалить квартиру?</h3>
+            <p className="text-gray-600 mb-6">
+              Вы уверены, что хотите удалить квартиру {apartmentToDelete?.complex}? 
+              Это действие нельзя будет отменить.
+            </p>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 px-4 py-2 border rounded-lg"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg"
+              >
+                Удалить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Форма редактирования */}
+      {showEditForm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold">Редактировать квартиру</h3>
+              <button 
+                onClick={() => setShowEditForm(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Основная информация */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Название ЖК
+                  </label>
+                  <input
+                    type="text"
+                    value={editingApartment?.complex}
+                    onChange={(e) => setEditingApartment(prev => ({
+                      ...prev,
+                      complex: e.target.value
+                    }))}
+                    className="w-full p-3 border rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Адрес
+                  </label>
+                  <input
+                    type="text"
+                    value={editingApartment?.address}
+                    onChange={(e) => setEditingApartment(prev => ({
+                      ...prev,
+                      address: e.target.value
+                    }))}
+                    className="w-full p-3 border rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Количество комнат
+                  </label>
+                  <input
+                    type="number"
+                    value={editingApartment?.rooms}
+                    onChange={(e) => setEditingApartment(prev => ({
+                      ...prev,
+                      rooms: e.target.value
+                    }))}
+                    className="w-full p-3 border rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Цена за сутки
+                  </label>
+                  <input
+                    type="number"
+                    value={editingApartment?.price}
+                    onChange={(e) => setEditingApartment(prev => ({
+                      ...prev,
+                      price: e.target.value
+                    }))}
+                    className="w-full p-3 border rounded-lg"
+                  />
+                </div>
+              </div>
+
+              {/* Загрузка фотографий */}
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Фотографии
+                </label>
+                <div className="grid grid-cols-4 gap-4 mb-4">
+                  {editingApartment?.images.map((url, index) => (
+                    <div key={index} className="aspect-square rounded-lg overflow-hidden relative group">
+                      <img src={url} className="w-full h-full object-cover" alt="" />
+                      <button
+                        onClick={() => setEditingApartment(prev => ({
+                          ...prev,
+                          images: prev.images.filter((_, i) => i !== index)
+                        }))}
+                        className="absolute top-2 right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  <label className="aspect-square border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                    <FaPlus className="text-gray-400" />
+                  </label>
+                </div>
+              </div>
+
+              {/* Удобства */}
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Удобства
+                </label>
+                <div className="grid grid-cols-2 gap-4">
+                  <AmenityToggle
+                    icon={FaWifi}
+                    label="Wi-Fi"
+                    value={editingApartment?.amenities.wifi}
+                    onChange={(e) => setEditingApartment(prev => ({
+                      ...prev,
+                      amenities: {
+                        ...prev.amenities,
+                        wifi: e.target.checked
+                      }
+                    }))}
+                  />
+                  <AmenityToggle
+                    icon={FaTv}
+                    label="Телевизор"
+                    value={editingApartment?.amenities.tv}
+                    onChange={(e) => setEditingApartment(prev => ({
+                      ...prev,
+                      amenities: {
+                        ...prev.amenities,
+                        tv: e.target.checked
+                      }
+                    }))}
+                  />
+                  <AmenityToggle
+                    icon={FaParking}
+                    label="Парковка"
+                    value={editingApartment?.amenities.parking}
+                    onChange={(e) => setEditingApartment(prev => ({
+                      ...prev,
+                      amenities: {
+                        ...prev.amenities,
+                        parking: e.target.checked
+                      }
+                    }))}
+                  />
+                  <AmenityToggle
+                    icon={FaSnowflake}
+                    label="Кондиционер"
+                    value={editingApartment?.amenities.ac}
+                    onChange={(e) => setEditingApartment(prev => ({
+                      ...prev,
+                      amenities: {
+                        ...prev.amenities,
+                        ac: e.target.checked
+                      }
+                    }))}
+                  />
+                  <AmenityToggle
+                    icon={FaUtensils}
+                    label="Кухня"
+                    value={editingApartment?.amenities.kitchen}
+                    onChange={(e) => setEditingApartment(prev => ({
+                      ...prev,
+                      amenities: {
+                        ...prev.amenities,
+                        kitchen: e.target.checked
+                      }
+                    }))}
+                  />
+                  <AmenityToggle
+                    icon={FaWater}
+                    label="Вода"
+                    value={editingApartment?.amenities.water}
+                    onChange={(e) => setEditingApartment(prev => ({
+                      ...prev,
+                      amenities: {
+                        ...prev.amenities,
+                        water: e.target.checked
+                      }
+                    }))}
+                  />
+                </div>
+              </div>
+
+              {/* Описание */}
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Описание
+                </label>
+                <textarea
+                  value={editingApartment?.description}
+                  onChange={(e) => setEditingApartment(prev => ({
+                    ...prev,
+                    description: e.target.value
+                  }))}
+                  rows={4}
+                  className="w-full p-3 border rounded-lg"
+                />
+              </div>
+
+              {/* Кнопки */}
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => setShowEditForm(false)}
+                  className="flex-1 px-4 py-2 border rounded-lg"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg"
+                >
+                  Сохранить изменения
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Форма добавления квартиры */}
       {showAddForm && (

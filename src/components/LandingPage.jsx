@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { FaRobot, FaWhatsapp, FaChartLine, FaHeart, FaGlobe, FaWallet } from 'react-icons/fa';
 import Header from './Header';
 import { useModal } from '../contexts/ModalContext';
+import { useAuth } from '../contexts/AuthContext';
 
 const LandingPage = () => {
   const navigate = useNavigate();
   const { setShowConsultation } = useModal();
+  const { currentUser } = useAuth();
 
   return (
     <div className="min-h-screen">
@@ -78,19 +80,6 @@ const LandingPage = () => {
         </div>
       </div>
 
-      {/* Made in KZ Section */}
-      <div className="py-20 bg-gray-50">
-        <div className="max-w-6xl mx-auto px-4 text-center">
-          <div className="inline-block mb-8">
-            <span className="px-4 py-2 bg-blue-100 text-blue-800 rounded-full text-sm font-medium flex items-center justify-center gap-2">
-              Сделано в Казахстане
-              <span className="text-lg">🇰🇿</span>
-              <span className="text-lg">❤️</span>
-            </span>
-          </div>
-        </div>
-      </div>
-
       {/* Call to Action Section */}
       <div className="bg-[#2563EB] text-white py-32">
         <div className="max-w-6xl mx-auto px-4 text-center">
@@ -102,10 +91,10 @@ const LandingPage = () => {
               Создайте его прямо сейчас
             </p>
             <button
-              onClick={() => navigate('/auth')}
+              onClick={() => navigate(currentUser ? '/dashboard' : '/auth')}
               className="px-8 py-4 bg-black text-white rounded-xl text-lg font-medium hover:bg-opacity-90 transition-colors"
             >
-              Создать ассистента
+              {currentUser ? 'Перейти в личный кабинет' : 'Создать ассистента'}
             </button>
             <div className="mt-4">
               <span className="inline-block px-4 py-2 bg-white/10 rounded-full text-sm">
@@ -115,15 +104,6 @@ const LandingPage = () => {
           </div>
         </div>
       </div>
-
-      {/* Footer */}
-      <footer className="bg-white border-t py-12">
-        <div className="max-w-6xl mx-auto px-4 text-center">
-          <p className="text-gray-600">
-            © 2025 Uilet.kz. Все права защищены.
-          </p>
-        </div>
-      </footer>
     </div>
   );
 };

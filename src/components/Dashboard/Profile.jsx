@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 const Profile = ({ siteUrl, onSiteUrlChange }) => {
   const { currentUser, updatePassword, logout, loading } = useAuth();
   const navigate = useNavigate();
-  const [currentPlan, setCurrentPlan] = useState('basic');
+  const [currentPlan, setCurrentPlan] = useState('light');
   const [isEditingPassword, setIsEditingPassword] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -14,24 +14,39 @@ const Profile = ({ siteUrl, onSiteUrlChange }) => {
 
   const plans = [
     {
-      id: 'basic',
-      name: 'Базовый',
-      price: '5000',
+      id: 'light',
+      name: 'Лайт',
+      price: '9900',
       features: [
         'До 5 объявлений',
         'Базовый ИИ-ассистент',
-        'Поддомен на uilet.kz'
+        'Поддомен на uilet.kz',
+        'Базовый календарь бронирований'
+      ]
+    },
+    {
+      id: 'business',
+      name: 'Бизнес',
+      isPopular: true,
+      price: '19900',
+      features: [
+        'Все функции тарифа Лайт',
+        'Расширенный ИИ-ассистент',
+        'Собственный домен',
+        'Синхронизация с Google Calendar',
+        'Автоматическая блокировка дат'
       ]
     },
     {
       id: 'pro',
-      name: 'Профессиональный',
-      price: '15000',
+      name: 'Про',
+      price: '29900',
       features: [
-        'Неограниченное количество объявлений',
-        'Расширенный ИИ-ассистент',
-        'Собственный домен',
-        'Продвинутая аналитика'
+        'Все функции тарифа Бизнес',
+        'Приоритетная поддержка 24/7',
+        'Мультикалендарь для всех площадок',
+        'API для интеграций с внешними системами',
+        'Синхронизация с Booking.com и Airbnb'
       ]
     }
   ];
@@ -163,29 +178,53 @@ const Profile = ({ siteUrl, onSiteUrlChange }) => {
           </div>
         )}
 
-        {/* Тариф */}
-        <div className="border rounded-lg p-4">
-          <h3 className="font-medium mb-4">Тарифный план</h3>
-          <div className="grid grid-cols-2 gap-4">
+        {/* Тарифы */}
+        <div className="border rounded-lg p-4 mb-6">
+          <h3 className="font-medium mb-4">Текущий тариф</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {plans.map(plan => (
               <div
                 key={plan.id}
-                className={`border rounded-lg p-4 cursor-pointer ${
+                className={`border rounded-lg p-4 cursor-pointer relative ${
                   currentPlan === plan.id ? 'border-blue-600 bg-blue-50' : ''
                 }`}
                 onClick={() => setCurrentPlan(plan.id)}
               >
+                {plan.isPopular && (
+                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
+                    <span className="bg-orange-100 text-orange-600 text-xs px-2 py-1 rounded-full inline-flex items-center gap-1">
+                      <span role="img" aria-label="fire">🔥</span>
+                      Покупают чаще
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center mb-2">
                   <h4 className="font-medium">{plan.name}</h4>
                   <span className="text-lg font-bold">{plan.price} ₸</span>
                 </div>
                 <ul className="text-sm text-gray-600 space-y-2">
                   {plan.features.map((feature, index) => (
-                    <li key={index}>• {feature}</li>
+                    <li key={index} className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-xs">✓</span>
+                      {feature}
+                    </li>
                   ))}
                 </ul>
+                {currentPlan === plan.id && (
+                  <div className="mt-4 text-sm text-blue-600">
+                    Текущий тариф
+                  </div>
+                )}
               </div>
             ))}
+          </div>
+          <div className="mt-4 flex justify-end">
+            <button
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+              onClick={() => {/* Логика обновления тарифа */}}
+            >
+              Обновить тариф
+            </button>
           </div>
         </div>
 

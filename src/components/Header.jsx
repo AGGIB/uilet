@@ -3,53 +3,73 @@ import { Link, useNavigate } from 'react-router-dom';
 import { FaBars, FaTimes, FaRegBuilding } from 'react-icons/fa';
 import Logo from '../assets/logo';
 import { useModal } from '../contexts/ModalContext';
+import { useAuth } from '../contexts/AuthContext';
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigate = useNavigate();
   const { setShowConsultation } = useModal();
-
-  const handleCreateListing = () => {
-    navigate('/auth');
-  };
+  const { currentUser } = useAuth();
 
   return (
     <header className="fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-md z-40 border-b">
       <div className="max-w-7xl mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
-          {/* Левая часть */}
-          <div className="flex items-center gap-8">
-            <Link to="/" className="h-8 w-auto">
-              <Logo />
-            </Link>
+        <div className="flex items-center h-16">
+          {/* Логотип */}
+          <Link to="/" className="h-8 w-auto">
+            <Logo />
+          </Link>
+
+          {/* Центральная навигация */}
+          <div className="flex-1 flex justify-center">
             <nav className="hidden md:flex items-center gap-6">
-              <Link to="/pricing" className="text-gray-600 hover:text-gray-900">
-                Стоимость
-              </Link>
+              <button
+                onClick={() => navigate(currentUser ? '/dashboard' : '/auth')}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                Дэшборд
+              </button>
               <button 
                 onClick={() => setShowConsultation(true)}
                 className="text-gray-600 hover:text-gray-900"
               >
                 Консультация
               </button>
+              <Link to="/pricing" className="text-gray-600 hover:text-gray-900">
+                Стоимость
+              </Link>
+              <Link to="/blog" className="text-gray-600 hover:text-gray-900">
+                Блог
+              </Link>
             </nav>
           </div>
 
           {/* Правая часть */}
           <div className="hidden md:flex items-center gap-4">
-            <button 
-              onClick={handleCreateListing}
-              className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900"
-            >
-              <FaRegBuilding />
-              <span>Создать объявление</span>
-            </button>
-            <Link
-              to="/auth"
-              className="px-4 py-2 bg-[#2563EB] text-white rounded-lg hover:bg-opacity-90 transition-colors"
-            >
-              Войти
-            </Link>
+            {currentUser ? (
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Дэшборд
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => navigate('/auth')}
+                  className="px-4 py-2 text-blue-600 hover:text-blue-700"
+                >
+                  Войти
+                </button>
+                <button
+                  onClick={() => navigate('/register')}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                >
+                  <FaRegBuilding />
+                  <span>Создать объявление</span>
+                </button>
+              </>
+            )}
           </div>
 
           {/* Мобильное меню */}
@@ -66,13 +86,15 @@ const Header = () => {
       {isMenuOpen && (
         <div className="md:hidden border-t">
           <div className="px-4 py-2 space-y-3">
-            <Link 
-              to="/pricing" 
-              className="block py-2 text-gray-600"
-              onClick={() => setIsMenuOpen(false)}
+            <button
+              onClick={() => {
+                navigate(currentUser ? '/dashboard' : '/auth');
+                setIsMenuOpen(false);
+              }}
+              className="block py-2 text-gray-600 w-full text-left"
             >
-              Стоимость
-            </Link>
+              Дэшборд
+            </button>
             <button 
               onClick={() => {
                 setShowConsultation(true);
@@ -82,22 +104,43 @@ const Header = () => {
             >
               Консультация
             </button>
-            <button
-              onClick={() => {
-                navigate('/auth');
-                setIsMenuOpen(false);
-              }}
-              className="block py-2 text-gray-600 w-full text-left"
-            >
-              Создать объявление
-            </button>
-            <Link
-              to="/auth"
+            <Link 
+              to="/pricing" 
               className="block py-2 text-gray-600"
               onClick={() => setIsMenuOpen(false)}
             >
-              Войти
+              Стоимость
             </Link>
+            <Link 
+              to="/blog" 
+              className="block py-2 text-gray-600"
+              onClick={() => setIsMenuOpen(false)}
+            >
+              Блог
+            </Link>
+            {!currentUser && (
+              <>
+                <button
+                  onClick={() => {
+                    navigate('/auth');
+                    setIsMenuOpen(false);
+                  }}
+                  className="block py-2 text-gray-600 w-full text-left"
+                >
+                  Войти
+                </button>
+                <button
+                  onClick={() => {
+                    navigate('/register');
+                    setIsMenuOpen(false);
+                  }}
+                  className="block py-2 text-gray-600 w-full text-left flex items-center gap-2"
+                >
+                  <FaRegBuilding />
+                  <span>Создать объявление</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
