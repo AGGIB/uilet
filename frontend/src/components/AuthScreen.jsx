@@ -1,17 +1,13 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FaRegEyeSlash, FaRegEye } from 'react-icons/fa';
 import Logo from '../assets/logo';
-import { useAuth } from '../contexts/AuthContext';
 
 const AuthScreen = ({ isRegister = false }) => {
   const navigate = useNavigate();
-  const { login, signup } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -21,12 +17,25 @@ const AuthScreen = ({ isRegister = false }) => {
     setLoading(true);
 
     try {
-      if (isRegister) {
-        await signup(formData.email, formData.password);
-      } else {
-        await login(formData.email, formData.password);
+      const endpoint = isRegister ? '/auth/sign-up' : '/auth/sign-in';
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Произошла ошибка');
       }
-      navigate('/dashboard');
+
+      if (data.token) {
+        localStorage.setItem('token', data.token);
+        navigate('/dashboard');
+      }
     } catch (error) {
       setError(error.message);
     } finally {
@@ -73,22 +82,13 @@ const AuthScreen = ({ isRegister = false }) => {
 
           <div>
             <label className="block text-sm font-medium">Пароль</label>
-            <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"}
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-              >
-                {showPassword ? <FaRegEyeSlash size={20} /> : <FaRegEye size={20} />}
-              </button>
-            </div>
+            <input
+              type="password"
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              required
+            />
           </div>
 
           {!isRegister && (

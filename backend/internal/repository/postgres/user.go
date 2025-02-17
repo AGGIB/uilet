@@ -2,7 +2,7 @@ package postgres
 
 import (
 	"database/sql"
-	"errors"
+	"fmt"
 
 	"github.com/yourusername/uilet/internal/model"
 )
@@ -15,57 +15,73 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-func (r *UserRepository) Create(user model.User) error {
+func (r *UserRepository) Create(user *model.User) error {
 	query := `
-        INSERT INTO users (email, password_hash, name, phone, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO users (email, password_hash, created_at, updated_at)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id
     `
 
-	_, err := r.db.Exec(query,
+	err := r.db.QueryRow(
+		query,
 		user.Email,
-		user.Password,
-		user.Name,
-		user.Phone,
+		user.PasswordHash,
 		user.CreatedAt,
 		user.UpdatedAt,
-	)
+	).Scan(&user.ID)
 
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to create user: %v", err)
+	}
+
+	return nil
 }
 
-func (r *UserRepository) GetByEmail(email string) (model.User, error) {
-	var user model.User
+func (r *UserRepository) GetByEmail(email string) (*model.User, error) {
+	user := &model.User{}
 	query := `
-        SELECT id, email, password_hash, name, phone, created_at, updated_at
-        FROM users
-        WHERE email = $1
+        SELECT id, email, password_hash, created_at, updated_at
+        FROM users WHERE email = $1
     `
 
 	err := r.db.QueryRow(query, email).Scan(
 		&user.ID,
 		&user.Email,
-		&user.Password,
-		&user.Name,
-		&user.Phone,
+		&user.PasswordHash,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
 
 	if err == sql.ErrNoRows {
-		return user, errors.New("user not found")
+		return nil, fmt.Errorf("user not found")
 	}
 
-	return user, err
+	if err != nil {
+		return nil, fmt.Errorf("database error: %v", err)
+	}
+
+	return user, nil
 }
 
 func (r *UserRepository) GetByID(id uint) (*model.User, error) {
-	var user model.User
-	err := r.db.QueryRow("SELECT id, email, name, phone FROM users WHERE id = $1", id).
-		Scan(&user.ID, &user.Email, &user.Name, &user.Phone)
+	user := &model.User{}
+	query := `
+        SELECT id, email, created_at, updated_at
+        FROM users WHERE id = $1
+    `
+
+	err := r.db.QueryRow(query, id).Scan(
+		&user.ID,
+		&user.Email,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get user: %v", err)
 	}
-	return &user, nil
+
+	return user, nil
 }
 
 func (r *UserRepository) UpdateProfile(userID uint, input model.UpdateProfileInput) error {
@@ -76,4 +92,4 @@ func (r *UserRepository) UpdateProfile(userID uint, input model.UpdateProfileInp
 		userID,
 	)
 	return err
-} 
+}

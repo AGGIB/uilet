@@ -20,33 +20,48 @@ func (h *AuthHandler) SignUp(c *gin.Context) {
 	var input model.SignUpInput
 
 	if err := c.BindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Неверный формат данных",
+			"details": "Проверьте правильность заполнения всех полей",
+		})
 		return
 	}
 
 	if err := h.service.SignUp(input); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "user created successfully"})
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "Пользователь успешно создан",
+	})
 }
 
 func (h *AuthHandler) SignIn(c *gin.Context) {
 	var input model.SignInInput
 
 	if err := c.BindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Неверный формат данных",
+			"details": "Проверьте правильность email и пароля",
+		})
 		return
 	}
 
 	token, err := h.service.SignIn(input)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": err.Error(),
+		})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"token": token})
+	c.JSON(http.StatusOK, gin.H{
+		"token":   token,
+		"message": "Вход выполнен успешно",
+	})
 }
 
 func (h *AuthHandler) GetProfile(c *gin.Context) {
@@ -75,4 +90,4 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "profile updated successfully"})
-} 
+}

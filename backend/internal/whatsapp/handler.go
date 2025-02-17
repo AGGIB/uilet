@@ -8,14 +8,20 @@ import (
 )
 
 type MessageHandler struct {
-	client  *Client
-	aiHandler func(string) (string, error) // Функция для обработки сообщений через AI
+	client    *Client
+	aiHandler func(string) (string, error)
 }
 
-func newMessageHandler(c *Client) *MessageHandler {
+func newMessageHandler() *MessageHandler {
 	return &MessageHandler{
-		client: c,
+		aiHandler: func(msg string) (string, error) {
+			return "Default response", nil // Дефолтный обработчик
+		},
 	}
+}
+
+func (h *MessageHandler) SetClient(c *Client) {
+	h.client = c
 }
 
 func (h *MessageHandler) SetAIHandler(handler func(string) (string, error)) {
@@ -50,4 +56,4 @@ func (h *MessageHandler) HandleTextMessage(message whatsapp.TextMessage) {
 			fmt.Printf("Error sending response: %v\n", err)
 		}
 	}
-} 
+}
