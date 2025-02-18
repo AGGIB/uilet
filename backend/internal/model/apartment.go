@@ -62,3 +62,14 @@ type UpdateApartmentInput struct {
 	Features []string `json:"features"`
 	Rules    string   `json:"rules"`
 }
+
+type ApartmentRepository interface {
+	Create(apartment *Apartment) error
+	GetByUserID(userID uint) ([]Apartment, error)
+	GetByID(userID uint, apartmentID string) (*Apartment, error)
+	Update(userID uint, apartmentID string, input *UpdateApartmentInput) error
+	Delete(userID uint, apartmentID string) error
+	AddImages(userID uint, apartmentID string, imageData [][]byte, imageTypes []string) error
+	GetImage(apartmentID string, index int) ([]byte, string, error)
+	DeleteImage(userID uint, apartmentID string, index int) error
+}

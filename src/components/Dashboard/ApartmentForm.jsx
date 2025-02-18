@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FaUpload, FaTimes } from 'react-icons/fa';
 
 const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
@@ -46,6 +46,17 @@ const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
 
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [previewUrls, setPreviewUrls] = useState([]);
+  const [existingImages, setExistingImages] = useState([]);
+  
+  useEffect(() => {
+    if (apartment && apartment.image_count > 0) {
+      // Загружаем существующие изображения
+      const urls = Array.from({ length: apartment.image_count }, (_, index) => 
+        `/api/apartments/${apartment.id}/images/${index}`
+      );
+      setExistingImages(urls);
+    }
+  }, [apartment]);
 
   const handleImageChange = (e) => {
     const files = Array.from(e.target.files);
@@ -55,9 +66,31 @@ const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
     setPreviewUrls(prev => [...prev, ...newPreviewUrls]);
   };
 
-  const removeImage = (index) => {
+  const removeNewImage = (index) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
     setPreviewUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeExistingImage = async (index) => {
+    if (window.confirm('Вы уверены, что хотите удалить это изображение?')) {
+      try {
+        const response = await fetch(`/api/apartments/${apartment.id}/images/${index}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+
+        if (response.ok) {
+          setExistingImages(prev => prev.filter((_, i) => i !== index));
+        } else {
+          alert('Ошибка при удалении изображения');
+        }
+      } catch (error) {
+        console.error('Error deleting image:', error);
+        alert('Ошибка при удалении изображения');
+      }
+    }
   };
 
   const handleNumberInput = (e, field) => {
@@ -74,39 +107,94 @@ const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    const formDataToSend = new FormData();
-    
-    // Добавляем основные данные
-    const jsonData = {
-      complex: formData.complex,
-      rooms: parseInt(String(formData.rooms).replace(/[^0-9]/g, '')) || 0,
-      price: parseInt(String(formData.price).replace(/[^0-9]/g, '')) || 0,
-      area: parseFloat(String(formData.area).replace(/[^0-9.]/g, '')) || 0,
-      floor: parseInt(String(formData.floor).replace(/[^0-9]/g, '')) || 0,
-      description: formData.description || '',
-      address: formData.address || '',
-      location: formData.location || '',
-      rules: formData.rules || '',
-      amenities: formData.amenities || {},
-      available_dates: {
-        start: formData.availableDates?.start || '',
-        end: formData.availableDates?.end || ''
-      }
-    };
-
-    formDataToSend.append('data', JSON.stringify(jsonData));
-
-    // Добавляем изображения
-    selectedFiles.forEach((file, index) => {
-      formDataToSend.append(`images`, file);
-      console.log(`Sending image ${index}:`, file); // Для отладки
-    });
-
     try {
-      onSubmit(formDataToSend);
+      if (isEdit) {
+        // Если это редактирование
+        const formDataToSend = new FormData();
+        const jsonData = {
+          complex: formData.complex,
+          rooms: parseInt(String(formData.rooms).replace(/[^0-9]/g, '')) || 0,
+          price: parseInt(String(formData.price).replace(/[^0-9]/g, '')) || 0,
+          area: parseFloat(String(formData.area).replace(/[^0-9.]/g, '')) || 0,
+          floor: parseInt(String(formData.floor).replace(/[^0-9]/g, '')) || 0,
+          description: formData.description || '',
+          address: formData.address || '',
+          location: formData.location || '',
+          rules: formData.rules || '',
+          amenities: formData.amenities || {},
+          available_dates: {
+            start: formData.availableDates?.start || '',
+            end: formData.availableDates?.end || ''
+          }
+        };
+
+        // Сначала обновляем основные данные
+        formDataToSend.append('data', JSON.stringify(jsonData));
+        
+        const response = await fetch(`/api/apartments/${apartment.id}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: formDataToSend
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to update apartment');
+        }
+
+        // Если есть новые изображения, загружаем их
+        if (selectedFiles.length > 0) {
+          const imageFormData = new FormData();
+          selectedFiles.forEach(file => {
+            imageFormData.append('images', file);
+          });
+
+          const imageResponse = await fetch(`/api/apartments/${apartment.id}/images`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: imageFormData
+          });
+
+          if (!imageResponse.ok) {
+            throw new Error('Failed to upload images');
+          }
+        }
+
+        // Сигнализируем об успешном обновлении
+        onSubmit(null);
+      } else {
+        // Если это создание нового объявления
+        const formDataToSend = new FormData();
+        const jsonData = {
+          complex: formData.complex,
+          rooms: parseInt(String(formData.rooms).replace(/[^0-9]/g, '')) || 0,
+          price: parseInt(String(formData.price).replace(/[^0-9]/g, '')) || 0,
+          area: parseFloat(String(formData.area).replace(/[^0-9.]/g, '')) || 0,
+          floor: parseInt(String(formData.floor).replace(/[^0-9]/g, '')) || 0,
+          description: formData.description || '',
+          address: formData.address || '',
+          location: formData.location || '',
+          rules: formData.rules || '',
+          amenities: formData.amenities || {},
+          available_dates: {
+            start: formData.availableDates?.start || '',
+            end: formData.availableDates?.end || ''
+          }
+        };
+
+        formDataToSend.append('data', JSON.stringify(jsonData));
+        selectedFiles.forEach(file => {
+          formDataToSend.append('images', file);
+        });
+
+        await onSubmit(formDataToSend);
+      }
     } catch (error) {
-      console.error('Error preparing form data:', error);
-      alert('Ошибка при подготовке данных формы');
+      console.error('Error saving apartment:', error);
+      alert('Ошибка при сохранении объявления');
     }
   };
 
@@ -226,18 +314,47 @@ const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
       <div>
         <label className="block text-sm font-medium mb-2">Фотографии</label>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {previewUrls.map((url, index) => (
-            <div key={index} className="relative">
-              <img src={url} alt="" className="w-full h-32 object-cover rounded-lg" />
+          {/* Существующие изображения */}
+          {existingImages.map((url, index) => (
+            <div key={`existing-${index}`} className="relative">
+              <img
+                src={url}
+                alt=""
+                className="w-full h-32 object-cover rounded-lg"
+                crossOrigin="anonymous"
+              />
               <button
                 type="button"
-                onClick={() => removeImage(index)}
+                onClick={() => removeExistingImage(index)}
                 className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full"
               >
                 <FaTimes />
               </button>
             </div>
           ))}
+
+          {/* Новые изображения */}
+          {previewUrls.map((url, index) => (
+            <div key={`new-${index}`} className="relative">
+              <img
+                src={url}
+                alt=""
+                className="w-full h-32 object-cover rounded-lg"
+              />
+              <button
+                type="button"
+                onClick={() => removeNewImage(index)}
+                className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full"
+              >
+                <FaTimes />
+              </button>
+              <div className="absolute bottom-2 left-2 bg-green-500 text-white px-2 py-1 rounded text-xs">
+                Новое
+              </div>
+            </div>
+          ))}
+
+          {/* Кнопка добавления */}
           <label className="border-2 border-dashed rounded-lg p-4 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50">
             <FaUpload className="text-2xl mb-2" />
             <span className="text-sm">Добавить фото</span>

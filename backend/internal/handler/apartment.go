@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yourusername/uilet/internal/model"
@@ -229,4 +230,23 @@ func (h *ApartmentHandler) Delete(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Объявление успешно удалено"})
+}
+
+func (h *ApartmentHandler) DeleteImage(c *gin.Context) {
+	userID, _ := c.Get("userID")
+	apartmentID := c.Param("id")
+	imageIndex := c.Param("index")
+
+	index, err := strconv.Atoi(imageIndex)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid image index"})
+		return
+	}
+
+	if err := h.service.DeleteImage(userID.(uint), apartmentID, index); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Image deleted successfully"})
 }

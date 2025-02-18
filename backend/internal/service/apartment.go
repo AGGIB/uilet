@@ -68,3 +68,22 @@ func (s *ApartmentService) GetImage(apartmentID string, imageIndex string) ([]by
 func (s *ApartmentService) Delete(userID uint, apartmentID string) error {
 	return s.repo.Delete(userID, apartmentID)
 }
+
+func (s *ApartmentService) DeleteImage(userID uint, apartmentID string, index int) error {
+	// Проверяем, что объявление принадлежит пользователю
+	apartment, err := s.repo.GetByID(userID, apartmentID)
+	if err != nil {
+		return fmt.Errorf("error getting apartment: %v", err)
+	}
+
+	if apartment.UserID != userID {
+		return fmt.Errorf("apartment does not belong to user")
+	}
+
+	// Удаляем изображение
+	if err := s.repo.DeleteImage(userID, apartmentID, index); err != nil {
+		return fmt.Errorf("error deleting image: %v", err)
+	}
+
+	return nil
+}

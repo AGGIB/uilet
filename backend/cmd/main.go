@@ -87,6 +87,7 @@ func main() {
 		api.GET("/apartments/:id", apartmentHandler.GetApartmentDetails)
 		api.POST("/apartments/:id/images", apartmentHandler.UploadImages)
 		api.DELETE("/apartments/:id", apartmentHandler.Delete)
+		api.DELETE("/apartments/:id/images/:index", apartmentHandler.DeleteImage)
 	}
 
 	// В функции main после инициализации роутера

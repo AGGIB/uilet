@@ -309,3 +309,65 @@ func (r *ApartmentRepository) Delete(userID uint, apartmentID string) error {
 
 	return nil
 }
+
+func (r *ApartmentRepository) DeleteImage(userID uint, apartmentID string, index int) error {
+	// Получаем текущие изображения
+	query := `
+        SELECT images, image_types, image_count
+        FROM apartments
+        WHERE id = $1 AND user_id = $2
+    `
+
+	var images [][]byte
+	var imageTypes []string
+	var imageCount int
+
+	err := r.db.QueryRow(query, apartmentID, userID).Scan(
+		pq.Array(&images),
+		pq.Array(&imageTypes),
+		&imageCount,
+	)
+	if err != nil {
+		return fmt.Errorf("error getting current images: %v", err)
+	}
+
+	// Проверяем валидность индекса
+	if index < 0 || index >= len(images) {
+		return fmt.Errorf("invalid image index")
+	}
+
+	// Удаляем изображение и его тип из слайсов
+	images = append(images[:index], images[index+1:]...)
+	imageTypes = append(imageTypes[:index], imageTypes[index+1:]...)
+
+	// Обновляем запись в базе данных
+	updateQuery := `
+        UPDATE apartments
+        SET images = $1::bytea[],
+            image_types = $2::varchar[],
+            image_count = array_length($1::bytea[], 1)
+        WHERE id = $3 AND user_id = $4
+    `
+
+	result, err := r.db.Exec(
+		updateQuery,
+		pq.Array(images),
+		pq.Array(imageTypes),
+		apartmentID,
+		userID,
+	)
+	if err != nil {
+		return fmt.Errorf("error updating images: %v", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error getting rows affected: %v", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("apartment not found or not owned by user")
+	}
+
+	return nil
+}

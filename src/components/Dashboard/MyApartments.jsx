@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FaEdit, FaPlus, FaTrash } from 'react-icons/fa';
+import { FaEdit, FaPlus, FaTrash, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import ApartmentForm from './ApartmentForm';
 
 const MyApartments = () => {
@@ -8,6 +8,7 @@ const MyApartments = () => {
   const [editingApartment, setEditingApartment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [currentImageIndex, setCurrentImageIndex] = useState({});
 
   useEffect(() => {
     fetchApartments();
@@ -37,6 +38,15 @@ const MyApartments = () => {
 
   const handleSubmit = async (formData) => {
     try {
+      if (!formData) {
+        // Если formData null - это сигнал об обновлении после редактирования
+        await fetchApartments();
+        setShowForm(false);
+        setEditingApartment(null);
+        setCurrentImageIndex({});
+        return;
+      }
+
       const url = editingApartment 
         ? `/api/apartments/${editingApartment.id}`
         : '/api/apartments';
@@ -56,9 +66,13 @@ const MyApartments = () => {
         throw new Error(error.error || 'Ошибка при сохранении объявления');
       }
 
+      // Обновляем список объявлений
       await fetchApartments();
+      
+      // Сбрасываем состояния
       setShowForm(false);
       setEditingApartment(null);
+      setCurrentImageIndex({});
     } catch (error) {
       console.error('Error saving apartment:', error);
       setError(error.message);
@@ -113,6 +127,28 @@ const MyApartments = () => {
     return new Date(dateStr).toLocaleDateString('ru-RU');
   };
 
+  const nextImage = (apartmentId, e) => {
+    e.stopPropagation();
+    const apartment = apartments.find(a => a.id === apartmentId);
+    if (!apartment || apartment.image_count <= 1) return;
+
+    setCurrentImageIndex(prev => ({
+      ...prev,
+      [apartmentId]: ((prev[apartmentId] || 0) + 1) % apartment.image_count
+    }));
+  };
+
+  const prevImage = (apartmentId, e) => {
+    e.stopPropagation();
+    const apartment = apartments.find(a => a.id === apartmentId);
+    if (!apartment || apartment.image_count <= 1) return;
+
+    setCurrentImageIndex(prev => ({
+      ...prev,
+      [apartmentId]: ((prev[apartmentId] || 0) - 1 + apartment.image_count) % apartment.image_count
+    }));
+  };
+
   if (loading) {
     return <div className="text-center py-4">Загрузка...</div>;
   }
@@ -154,17 +190,38 @@ const MyApartments = () => {
               <div key={apartment.id} className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                 <div className="relative h-48">
                   {apartment.image_count > 0 ? (
-                    <img
-                      src={getImageUrl(apartment.id, 0)}
-                      alt={apartment.complex}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        console.error(`Error loading image for apartment ${apartment.id}`);
-                        e.target.style.display = 'none';
-                        e.target.parentElement.innerHTML = '<div class="w-full h-full bg-gray-200 flex items-center justify-center"><span class="text-gray-400">Ошибка загрузки фото</span></div>';
-                      }}
-                      crossOrigin="anonymous"
-                    />
+                    <>
+                      <img
+                        src={getImageUrl(apartment.id, currentImageIndex[apartment.id] || 0)}
+                        alt={apartment.complex}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          console.error(`Error loading image for apartment ${apartment.id}`);
+                          e.target.style.display = 'none';
+                          e.target.parentElement.innerHTML = '<div class="w-full h-full bg-gray-200 flex items-center justify-center"><span class="text-gray-400">Ошибка загрузки фото</span></div>';
+                        }}
+                        crossOrigin="anonymous"
+                      />
+                      {apartment.image_count > 1 && (
+                        <>
+                          <button
+                            onClick={(e) => prevImage(apartment.id, e)}
+                            className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white/80 rounded-full p-2 hover:bg-white z-10"
+                          >
+                            <FaChevronLeft className="text-gray-700" />
+                          </button>
+                          <button
+                            onClick={(e) => nextImage(apartment.id, e)}
+                            className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white/80 rounded-full p-2 hover:bg-white z-10"
+                          >
+                            <FaChevronRight className="text-gray-700" />
+                          </button>
+                          <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 bg-white/80 px-2 py-1 rounded-full text-sm z-10">
+                            {(currentImageIndex[apartment.id] || 0) + 1} / {apartment.image_count}
+                          </div>
+                        </>
+                      )}
+                    </>
                   ) : (
                     <div className="w-full h-full bg-gray-200 flex items-center justify-center">
                       <span className="text-gray-400">Нет фото</span>

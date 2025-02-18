@@ -48,3 +48,12 @@ input[type="range"]::-webkit-slider-thumb:hover {
     overflow: hidden;
   }
 }
+
+.image-navigation-button {
+  transition: all 0.2s;
+}
+
+.image-navigation-button:hover {
+  background-color: rgba(255, 255, 255, 0.95);
+  transform: translateY(-50%) scale(1.1);
+}
