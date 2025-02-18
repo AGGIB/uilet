@@ -232,31 +232,64 @@ func (r *ApartmentRepository) GetByID(userID uint, apartmentID string) (*model.A
 }
 
 func (r *ApartmentRepository) AddImages(userID uint, apartmentID string, imageData [][]byte, imageTypes []string) error {
-	fmt.Printf("Adding images for apartment %s: count=%d\n", apartmentID, len(imageData)) // Для отладки
+	// Получаем текущие изображения
+	query := `
+        SELECT images, image_types, image_count
+        FROM apartments
+        WHERE id = $1 AND user_id = $2
+    `
 
+	var currentImages [][]byte
+	var currentTypes []string
+	var currentCount int
+
+	err := r.db.QueryRow(query, apartmentID, userID).Scan(
+		pq.Array(&currentImages),
+		pq.Array(&currentTypes),
+		&currentCount,
+	)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("error getting current images: %v", err)
+	}
+
+	// Добавляем новые изображения к существующим
+	allImages := append(currentImages, imageData...)
+	allTypes := append(currentTypes, imageTypes...)
+	newCount := len(allImages)
+
+	fmt.Printf("Current images: %d, Adding: %d, New total: %d\n", currentCount, len(imageData), newCount)
+
+	// Обновляем запись с явным указанием типов и нового количества
 	updateQuery := `
         UPDATE apartments
         SET images = $1::bytea[],
             image_types = $2::varchar[],
-            image_count = array_length($1::bytea[], 1)
-        WHERE id = $3 AND user_id = $4
-        RETURNING image_count
+            image_count = $3
+        WHERE id = $4 AND user_id = $5
     `
 
-	var newCount int
-	err := r.db.QueryRow(
+	result, err := r.db.Exec(
 		updateQuery,
-		pq.Array(imageData),
-		pq.Array(imageTypes),
+		pq.Array(allImages),
+		pq.Array(allTypes),
+		newCount,
 		apartmentID,
 		userID,
-	).Scan(&newCount)
-
+	)
 	if err != nil {
 		return fmt.Errorf("error updating images: %v", err)
 	}
 
-	fmt.Printf("Successfully updated images. New count: %d\n", newCount) // Для отладки
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error getting rows affected: %v", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("apartment not found or not owned by user")
+	}
+
+	fmt.Printf("Successfully updated images. New count: %d\n", newCount)
 	return nil
 }
 

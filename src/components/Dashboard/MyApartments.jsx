@@ -36,46 +36,60 @@ const MyApartments = () => {
     }
   };
 
-  const handleSubmit = async (formData) => {
+  const handleSubmit = async (action) => {
     try {
-      if (!formData) {
-        // Если formData null - это сигнал об обновлении после редактирования
+      if (action.type === 'update') {
+        setLoading(true);
+        // Делаем небольшую задержку перед запросом обновленных данных
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Обновляем только конкретное объявление
+        const response = await fetch(`/api/apartments/${action.id}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch updated apartment');
+        }
+
+        const updatedApartment = await response.json();
+        
+        // Обновляем состояние только для измененного объявления
+        setApartments(prev => prev.map(apt => 
+          apt.id === action.id ? updatedApartment : apt
+        ));
+
+        setShowForm(false);
+        setEditingApartment(null);
+        setCurrentImageIndex({});
+      } else if (action.type === 'create') {
+        setLoading(true);
+        const response = await fetch('/api/apartments', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: action.data
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Ошибка при сохранении объявления');
+        }
+
+        // Обновляем весь список после создания
         await fetchApartments();
         setShowForm(false);
         setEditingApartment(null);
         setCurrentImageIndex({});
-        return;
       }
-
-      const url = editingApartment 
-        ? `/api/apartments/${editingApartment.id}`
-        : '/api/apartments';
-      
-      const method = editingApartment ? 'PUT' : 'POST';
-
-      const response = await fetch(url, {
-        method: method,
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: formData
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Ошибка при сохранении объявления');
-      }
-
-      // Обновляем список объявлений
-      await fetchApartments();
-      
-      // Сбрасываем состояния
-      setShowForm(false);
-      setEditingApartment(null);
-      setCurrentImageIndex({});
     } catch (error) {
       console.error('Error saving apartment:', error);
       setError(error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
