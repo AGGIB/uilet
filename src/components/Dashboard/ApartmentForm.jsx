@@ -4,11 +4,23 @@ import { FaUpload, FaTimes } from 'react-icons/fa';
 const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
   const [formData, setFormData] = useState(() => {
     if (apartment) {
+      const formatDateForInput = (dateStr) => {
+        if (!dateStr) return '';
+        try {
+          const date = new Date(dateStr);
+          if (isNaN(date.getTime())) return '';
+          return date.toISOString().split('T')[0];
+        } catch (e) {
+          console.error('Error formatting date:', e);
+          return '';
+        }
+      };
+
       return {
         ...apartment,
-        availableDates: apartment.availableDates || {
-          start: '',
-          end: ''
+        availableDates: {
+          start: formatDateForInput(apartment.available_dates?.start),
+          end: formatDateForInput(apartment.available_dates?.end)
         },
         amenities: apartment.amenities || {
           wifi: false,
@@ -125,8 +137,12 @@ const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
           rules: formData.rules || '',
           amenities: formData.amenities || {},
           available_dates: {
-            start: formData.availableDates?.start || '',
-            end: formData.availableDates?.end || ''
+            start: formData.availableDates.start 
+              ? new Date(formData.availableDates.start).toISOString()
+              : '',
+            end: formData.availableDates.end 
+              ? new Date(formData.availableDates.end).toISOString()
+              : ''
           }
         };
 
@@ -199,8 +215,12 @@ const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
           rules: formData.rules || '',
           amenities: formData.amenities || {},
           available_dates: {
-            start: formData.availableDates?.start || '',
-            end: formData.availableDates?.end || ''
+            start: formData.availableDates.start 
+              ? new Date(formData.availableDates.start).toISOString()
+              : '',
+            end: formData.availableDates.end 
+              ? new Date(formData.availableDates.end).toISOString()
+              : ''
           }
         };
 
@@ -396,10 +416,16 @@ const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
           <input
             type="date"
             value={formData.availableDates.start}
-            onChange={(e) => setFormData({
-              ...formData,
-              availableDates: { ...formData.availableDates, start: e.target.value }
-            })}
+            onChange={(e) => {
+              console.log('Start date changed:', e.target.value); // Для отладки
+              setFormData({
+                ...formData,
+                availableDates: { 
+                  ...formData.availableDates, 
+                  start: e.target.value 
+                }
+              });
+            }}
             className="w-full p-2 border rounded-lg"
           />
         </div>
@@ -408,10 +434,16 @@ const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
           <input
             type="date"
             value={formData.availableDates.end}
-            onChange={(e) => setFormData({
-              ...formData,
-              availableDates: { ...formData.availableDates, end: e.target.value }
-            })}
+            onChange={(e) => {
+              console.log('End date changed:', e.target.value); // Для отладки
+              setFormData({
+                ...formData,
+                availableDates: { 
+                  ...formData.availableDates, 
+                  end: e.target.value 
+                }
+              });
+            }}
             className="w-full p-2 border rounded-lg"
           />
         </div>

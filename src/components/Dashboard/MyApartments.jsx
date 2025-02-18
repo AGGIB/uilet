@@ -137,8 +137,19 @@ const MyApartments = () => {
   };
 
   const formatDate = (dateStr) => {
-    if (!dateStr) return '';
-    return new Date(dateStr).toLocaleDateString('ru-RU');
+    if (!dateStr || dateStr === '') return 'Не указано';
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return 'Не указано';
+      return date.toLocaleDateString('ru-RU', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    } catch (e) {
+      console.error('Error formatting date:', e);
+      return 'Не указано';
+    }
   };
 
   const nextImage = (apartmentId, e) => {
@@ -290,12 +301,14 @@ const MyApartments = () => {
 
                   {apartment.available_dates && (
                     <div className="mt-3 pt-3 border-t">
-                      <p className="text-sm text-gray-600">
-                        <span className="font-medium">Доступно с:</span> {formatDate(apartment.available_dates.start)}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        <span className="font-medium">До:</span> {formatDate(apartment.available_dates.end)}
-                      </p>
+                      <div className="text-sm text-gray-600">
+                        <span className="font-medium">Доступно с:</span>{' '}
+                        {formatDate(apartment.available_dates.start)}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        <span className="font-medium">До:</span>{' '}
+                        {formatDate(apartment.available_dates.end)}
+                      </div>
                     </div>
                   )}
 

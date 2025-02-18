@@ -18,8 +18,8 @@ type Apartment struct {
 	CreatedAt      time.Time       `json:"created_at" db:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at" db:"updated_at"`
 	AvailableDates struct {
-		Start string `json:"start"`
-		End   string `json:"end"`
+		Start string `json:"start" db:"start_date"`
+		End   string `json:"end" db:"end_date"`
 	} `json:"available_dates" db:"available_dates"`
 	Location   string   `json:"location" db:"location"`
 	Rules      string   `json:"rules" db:"rules"`

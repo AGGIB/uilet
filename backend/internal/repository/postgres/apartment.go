@@ -137,13 +137,19 @@ func (r *ApartmentRepository) Update(userID uint, apartmentID string, apartment 
         UPDATE apartments 
         SET complex = $1, rooms = $2, price = $3, description = $4,
             address = $5, area = $6, floor = $7, amenities = $8,
-            location = $9, rules = $10, updated_at = $11
-        WHERE id = $12 AND user_id = $13
+            location = $9, rules = $10, updated_at = $11,
+            available_dates = $12
+        WHERE id = $13 AND user_id = $14
     `
 
 	amenitiesJSON, err := json.Marshal(apartment.Amenities)
 	if err != nil {
 		return fmt.Errorf("error marshaling amenities: %v", err)
+	}
+
+	availableDatesJSON, err := json.Marshal(apartment.AvailableDates)
+	if err != nil {
+		return fmt.Errorf("error marshaling available dates: %v", err)
 	}
 
 	result, err := r.db.Exec(
@@ -159,6 +165,7 @@ func (r *ApartmentRepository) Update(userID uint, apartmentID string, apartment 
 		apartment.Location,
 		apartment.Rules,
 		time.Now(),
+		availableDatesJSON,
 		apartmentID,
 		userID,
 	)
