@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FaEdit, FaPlus } from 'react-icons/fa';
+import { FaEdit, FaPlus, FaTrash } from 'react-icons/fa';
 import ApartmentForm from './ApartmentForm';
 
 const MyApartments = () => {
@@ -43,57 +43,17 @@ const MyApartments = () => {
       
       const method = editingApartment ? 'PUT' : 'POST';
 
-      // Создаем объект для отправки основных данных
-      const data = {
-        complex: formData.get('complex'),
-        rooms: parseInt(formData.get('rooms')),
-        price: parseInt(formData.get('price')),
-        description: formData.get('description'),
-        address: formData.get('address'),
-        area: parseFloat(formData.get('area')),
-        floor: parseInt(formData.get('floor')),
-        amenities: JSON.parse(formData.get('amenities')),
-        location: formData.get('location'),
-        rules: formData.get('rules')
-      };
-
-      // Отправляем основные данные
       const response = await fetch(url, {
-        method,
+        method: method,
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify(data)
+        body: formData
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to save apartment');
-      }
-
-      const responseData = await response.json();
-      const apartmentId = editingApartment ? editingApartment.id : responseData.id;
-
-      // Если есть файлы для загрузки
-      const files = formData.getAll('images');
-      if (files.length > 0) {
-        const imageFormData = new FormData();
-        files.forEach(file => {
-          imageFormData.append('images', file);
-        });
-
-        const imageResponse = await fetch(`/api/apartments/${apartmentId}/images`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          },
-          body: imageFormData
-        });
-
-        if (!imageResponse.ok) {
-          throw new Error('Failed to upload images');
-        }
+        const error = await response.json();
+        throw new Error(error.error || 'Ошибка при сохранении объявления');
       }
 
       await fetchApartments();
@@ -105,9 +65,52 @@ const MyApartments = () => {
     }
   };
 
+  const handleDelete = async (apartmentId) => {
+    if (!window.confirm('Вы уверены, что хотите удалить это объявление?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/apartments/${apartmentId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Ошибка при удалении объявления');
+      }
+
+      await fetchApartments();
+    } catch (error) {
+      console.error('Error deleting apartment:', error);
+      setError(error.message);
+    }
+  };
+
   const handleEdit = (apartment) => {
     setEditingApartment(apartment);
     setShowForm(true);
+  };
+
+  const getImageUrl = (apartmentId, index) => {
+    if (!apartmentId) return '';
+    return `/api/apartments/${apartmentId}/images/${index}`;
+  };
+
+  const hasImages = (apartment) => {
+    return apartment.image_count > 0;
+  };
+
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat('ru-RU').format(price);
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '';
+    return new Date(dateStr).toLocaleDateString('ru-RU');
   };
 
   if (loading) {
@@ -148,14 +151,24 @@ const MyApartments = () => {
             </div>
           ) : (
             apartments.map(apartment => (
-              <div key={apartment.id} className="border rounded-lg p-4">
-                <div className="relative">
-                  {apartment.images?.[0] && (
+              <div key={apartment.id} className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                <div className="relative h-48">
+                  {apartment.image_count > 0 ? (
                     <img
-                      src={apartment.images[0]}
+                      src={getImageUrl(apartment.id, 0)}
                       alt={apartment.complex}
-                      className="w-full h-48 object-cover rounded-lg mb-4"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        console.error(`Error loading image for apartment ${apartment.id}`);
+                        e.target.style.display = 'none';
+                        e.target.parentElement.innerHTML = '<div class="w-full h-full bg-gray-200 flex items-center justify-center"><span class="text-gray-400">Ошибка загрузки фото</span></div>';
+                      }}
+                      crossOrigin="anonymous"
                     />
+                  ) : (
+                    <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                      <span className="text-gray-400">Нет фото</span>
+                    </div>
                   )}
                   <div className="absolute top-2 right-2 flex gap-2">
                     <button
@@ -164,13 +177,76 @@ const MyApartments = () => {
                     >
                       <FaEdit className="text-blue-600" />
                     </button>
+                    <button
+                      onClick={() => handleDelete(apartment.id)}
+                      className="p-2 bg-white rounded-full shadow hover:bg-gray-100"
+                    >
+                      <FaTrash className="text-red-600" />
+                    </button>
                   </div>
                 </div>
-                <h3 className="font-bold text-lg mb-2">{apartment.complex}</h3>
-                <p className="text-gray-600 mb-2">{apartment.rooms}-комнатная</p>
-                <p className="font-bold text-xl text-blue-600">
-                  {apartment.price.toLocaleString()} ₸
-                </p>
+                <div className="p-4">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-bold text-lg">{apartment.complex}</h3>
+                    <p className="font-bold text-xl text-blue-600">
+                      {formatPrice(apartment.price)} ₸
+                    </p>
+                  </div>
+                  
+                  <p className="text-gray-600 mb-2">{apartment.rooms}-комнатная</p>
+                  
+                  {apartment.description && (
+                    <p className="text-gray-600 mb-2 line-clamp-2">{apartment.description}</p>
+                  )}
+
+                  {apartment.address && (
+                    <p className="text-gray-600 mb-2">
+                      <span className="font-medium">Адрес:</span> {apartment.address}
+                    </p>
+                  )}
+
+                  {apartment.area && (
+                    <p className="text-gray-600 mb-2">
+                      <span className="font-medium">Площадь:</span> {apartment.area} м²
+                    </p>
+                  )}
+
+                  {apartment.floor && (
+                    <p className="text-gray-600 mb-2">
+                      <span className="font-medium">Этаж:</span> {apartment.floor}
+                    </p>
+                  )}
+
+                  {apartment.available_dates && (
+                    <div className="mt-3 pt-3 border-t">
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Доступно с:</span> {formatDate(apartment.available_dates.start)}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">До:</span> {formatDate(apartment.available_dates.end)}
+                      </p>
+                    </div>
+                  )}
+
+                  {apartment.amenities && Object.keys(apartment.amenities).length > 0 && (
+                    <div className="mt-3 pt-3 border-t">
+                      <p className="font-medium text-sm mb-1">Удобства:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(apartment.amenities)
+                          .filter(([_, value]) => value)
+                          .map(([key]) => (
+                            <span key={key} className="text-xs bg-gray-100 px-2 py-1 rounded">
+                              {key === 'wifi' ? 'Wi-Fi' :
+                               key === 'parking' ? 'Парковка' :
+                               key === 'ac' ? 'Кондиционер' :
+                               key === 'washer' ? 'Стиральная машина' :
+                               key === 'kitchen' ? 'Кухня' : key}
+                            </span>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             ))
           )}

@@ -72,6 +72,9 @@ func main() {
 		auth.POST("/sign-in", authHandler.SignIn)
 	}
 
+	// Публичные роуты для изображений
+	router.GET("/api/apartments/:id/images/:index", apartmentHandler.GetImage)
+
 	// Защищенные роуты
 	api := router.Group("/api")
 	api.Use(middleware.AuthMiddleware(tokenManager))
@@ -83,6 +86,7 @@ func main() {
 		api.PUT("/apartments/:id", apartmentHandler.Update)
 		api.GET("/apartments/:id", apartmentHandler.GetApartmentDetails)
 		api.POST("/apartments/:id/images", apartmentHandler.UploadImages)
+		api.DELETE("/apartments/:id", apartmentHandler.Delete)
 	}
 
 	// В функции main после инициализации роутера

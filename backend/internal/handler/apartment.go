@@ -1,10 +1,10 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
-	"os"
-	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yourusername/uilet/internal/model"
@@ -21,19 +21,77 @@ func NewApartmentHandler(service *service.ApartmentService) *ApartmentHandler {
 
 func (h *ApartmentHandler) Create(c *gin.Context) {
 	userID, _ := c.Get("userID")
+
+	form, err := c.MultipartForm()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Failed to parse form: %v", err)})
+		return
+	}
+
+	// Получаем JSON данные
+	dataStr := form.Value["data"][0]
 	var input model.CreateApartmentInput
-
-	if err := c.BindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := json.Unmarshal([]byte(dataStr), &input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid JSON: %v", err)})
 		return
 	}
 
-	if err := h.service.Create(userID.(uint), input); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	// Создаем объявление
+	apartmentID, err := h.service.Create(userID.(uint), input)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create apartment: %v", err)})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "Объявление успешно создано"})
+	// Обрабатываем изображения
+	files := form.File["images"]
+	fmt.Printf("Received %d images\n", len(files)) // Для отладки
+
+	if len(files) > 0 {
+		imageData := make([][]byte, 0, len(files))
+		imageTypes := make([]string, 0, len(files))
+
+		for i, file := range files {
+			fmt.Printf("Processing image %d: %s, size: %d\n", i, file.Filename, file.Size) // Для отладки
+
+			src, err := file.Open()
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to open file: %v", err)})
+				return
+			}
+			defer src.Close()
+
+			data, err := ioutil.ReadAll(src)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to read file: %v", err)})
+				return
+			}
+
+			imageData = append(imageData, data)
+			imageTypes = append(imageTypes, file.Header.Get("Content-Type"))
+		}
+
+		// Сохраняем изображения
+		if err := h.service.AddImages(userID.(uint), fmt.Sprintf("%d", apartmentID), imageData, imageTypes); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to save images: %v", err)})
+			return
+		}
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "Объявление успешно создано",
+		"id":      apartmentID,
+	})
+}
+
+// Добавим вспомогательную функцию для проверки типа изображения
+func isAllowedImageType(contentType string) bool {
+	allowedTypes := map[string]bool{
+		"image/jpeg": true,
+		"image/png":  true,
+		"image/gif":  true,
+	}
+	return allowedTypes[contentType]
 }
 
 func (h *ApartmentHandler) GetUserApartments(c *gin.Context) {
@@ -52,9 +110,27 @@ func (h *ApartmentHandler) Update(c *gin.Context) {
 	userID, _ := c.Get("userID")
 	apartmentID := c.Param("id")
 
+	dataStr := c.PostForm("data")
+	if dataStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing form data"})
+		return
+	}
+
 	var input model.UpdateApartmentInput
-	if err := c.BindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := json.Unmarshal([]byte(dataStr), &input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("Invalid JSON: %v, data: %s", err, dataStr),
+		})
+		return
+	}
+
+	// Дополнительная проверка числовых полей
+	if input.Rooms <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid number of rooms"})
+		return
+	}
+	if input.Price <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid price"})
 		return
 	}
 
@@ -83,13 +159,6 @@ func (h *ApartmentHandler) UploadImages(c *gin.Context) {
 	apartmentID := c.Param("id")
 	userID, _ := c.Get("userID")
 
-	// Создаем директорию для загрузки, если её нет
-	uploadDir := "uploads"
-	if err := os.MkdirAll(uploadDir, 0755); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create upload directory"})
-		return
-	}
-
 	form, err := c.MultipartForm()
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse form"})
@@ -97,27 +166,67 @@ func (h *ApartmentHandler) UploadImages(c *gin.Context) {
 	}
 
 	files := form.File["images"]
-	imageURLs := make([]string, 0)
+	imageData := make([][]byte, 0)
+	imageTypes := make([]string, 0)
 
 	for _, file := range files {
-		// Генерируем уникальное имя файла
-		filename := fmt.Sprintf("%d_%s_%s", userID, apartmentID, file.Filename)
-		filepath := filepath.Join(uploadDir, filename)
+		// Открываем файл
+		src, err := file.Open()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open file"})
+			return
+		}
+		defer src.Close()
 
-		// Сохраняем файл
-		if err := c.SaveUploadedFile(file, filepath); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save file"})
+		// Читаем содержимое файла
+		data, err := ioutil.ReadAll(src)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read file"})
 			return
 		}
 
-		// Добавляем URL изображения
-		imageURLs = append(imageURLs, "/uploads/"+filename)
+		imageData = append(imageData, data)
+		imageTypes = append(imageTypes, file.Header.Get("Content-Type"))
 	}
 
-	if err := h.service.AddImages(userID.(uint), apartmentID, imageURLs); err != nil {
+	if err := h.service.AddImages(userID.(uint), apartmentID, imageData, imageTypes); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"images": imageURLs})
+	c.JSON(http.StatusOK, gin.H{"message": "Images uploaded successfully"})
+}
+
+// Добавим новый обработчик для получения изображения
+func (h *ApartmentHandler) GetImage(c *gin.Context) {
+	apartmentID := c.Param("id")
+	imageIndex := c.Param("index")
+
+	fmt.Printf("Getting image for apartment %s, index %s\n", apartmentID, imageIndex) // Для отладки
+
+	image, contentType, err := h.service.GetImage(apartmentID, imageIndex)
+	if err != nil {
+		fmt.Printf("Error getting image: %v\n", err) // Для отладки
+		c.JSON(http.StatusNotFound, gin.H{"error": "Image not found"})
+		return
+	}
+
+	// Устанавливаем заголовки для кэширования
+	c.Header("Cache-Control", "public, max-age=31536000")
+	c.Header("Content-Type", contentType)
+	c.Header("Content-Length", fmt.Sprintf("%d", len(image)))
+
+	c.Data(http.StatusOK, contentType, image)
+}
+
+func (h *ApartmentHandler) Delete(c *gin.Context) {
+	userID, _ := c.Get("userID")
+	apartmentID := c.Param("id")
+
+	if err := h.service.Delete(userID.(uint), apartmentID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Объявление успешно удалено"})
 }

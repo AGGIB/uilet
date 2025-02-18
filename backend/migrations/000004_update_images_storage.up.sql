@@ -1,0 +1,3 @@
+ALTER TABLE apartments
+ADD COLUMN IF NOT EXISTS image_data BYTEA[],
+ADD COLUMN IF NOT EXISTS image_types TEXT[]; 

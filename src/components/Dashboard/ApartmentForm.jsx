@@ -1,29 +1,47 @@
 import React, { useState } from 'react';
 import { FaUpload, FaTimes } from 'react-icons/fa';
-import DatePicker from 'react-datepicker';
-import "react-datepicker/dist/react-datepicker.css";
 
 const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
-  const [formData, setFormData] = useState(apartment || {
-    complex: '',
-    rooms: '',
-    price: '',
-    description: '',
-    address: '',
-    area: '',
-    floor: '',
-    location: '',
-    rules: '',
-    amenities: {
-      wifi: false,
-      parking: false,
-      ac: false,
-      washer: false,
-      kitchen: false,
-    },
-    features: [],
-    availableDates: [],
-    images: []
+  const [formData, setFormData] = useState(() => {
+    if (apartment) {
+      return {
+        ...apartment,
+        availableDates: apartment.availableDates || {
+          start: '',
+          end: ''
+        },
+        amenities: apartment.amenities || {
+          wifi: false,
+          parking: false,
+          ac: false,
+          washer: false,
+          kitchen: false,
+        }
+      };
+    }
+    return {
+      complex: '',
+      rooms: '',
+      price: '',
+      description: '',
+      address: '',
+      area: '',
+      floor: '',
+      location: '',
+      rules: '',
+      amenities: {
+        wifi: false,
+        parking: false,
+        ac: false,
+        washer: false,
+        kitchen: false,
+      },
+      availableDates: {
+        start: '',
+        end: ''
+      },
+      images: []
+    };
   });
 
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -42,26 +60,54 @@ const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
     setPreviewUrls(prev => prev.filter((_, i) => i !== index));
   };
 
+  const handleNumberInput = (e, field) => {
+    // Разрешаем только цифры и точку для площади
+    let value = e.target.value;
+    if (field === 'area') {
+      value = value.replace(/[^0-9.]/g, '');
+    } else {
+      value = value.replace(/[^0-9]/g, '');
+    }
+    setFormData({ ...formData, [field]: value });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     const formDataToSend = new FormData();
-
-    // Добавляем основные поля
-    Object.keys(formData).forEach(key => {
-      if (key === 'amenities' || key === 'features') {
-        formDataToSend.append(key, JSON.stringify(formData[key]));
-      } else if (key !== 'images') {
-        formDataToSend.append(key, formData[key]);
+    
+    // Добавляем основные данные
+    const jsonData = {
+      complex: formData.complex,
+      rooms: parseInt(String(formData.rooms).replace(/[^0-9]/g, '')) || 0,
+      price: parseInt(String(formData.price).replace(/[^0-9]/g, '')) || 0,
+      area: parseFloat(String(formData.area).replace(/[^0-9.]/g, '')) || 0,
+      floor: parseInt(String(formData.floor).replace(/[^0-9]/g, '')) || 0,
+      description: formData.description || '',
+      address: formData.address || '',
+      location: formData.location || '',
+      rules: formData.rules || '',
+      amenities: formData.amenities || {},
+      available_dates: {
+        start: formData.availableDates?.start || '',
+        end: formData.availableDates?.end || ''
       }
-    });
+    };
+
+    formDataToSend.append('data', JSON.stringify(jsonData));
 
     // Добавляем изображения
-    selectedFiles.forEach(file => {
-      formDataToSend.append('images', file);
+    selectedFiles.forEach((file, index) => {
+      formDataToSend.append(`images`, file);
+      console.log(`Sending image ${index}:`, file); // Для отладки
     });
 
-    await onSubmit(formDataToSend);
+    try {
+      onSubmit(formDataToSend);
+    } catch (error) {
+      console.error('Error preparing form data:', error);
+      alert('Ошибка при подготовке данных формы');
+    }
   };
 
   return (
@@ -81,10 +127,11 @@ const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
         <div>
           <label className="block text-sm font-medium">Количество комнат</label>
           <input
-            type="number"
+            type="text"
             value={formData.rooms}
-            onChange={(e) => setFormData({ ...formData, rooms: e.target.value })}
-            className="w-full p-3 border rounded-lg"
+            onChange={(e) => handleNumberInput(e, 'rooms')}
+            placeholder="Количество комнат"
+            className="w-full p-2 border rounded-lg"
             required
           />
         </div>
@@ -92,10 +139,11 @@ const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
         <div>
           <label className="block text-sm font-medium">Цена (тенге)</label>
           <input
-            type="number"
+            type="text"
             value={formData.price}
-            onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-            className="w-full p-3 border rounded-lg"
+            onChange={(e) => handleNumberInput(e, 'price')}
+            placeholder="Цена"
+            className="w-full p-2 border rounded-lg"
             required
           />
         </div>
@@ -103,20 +151,22 @@ const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
         <div>
           <label className="block text-sm font-medium">Площадь (м²)</label>
           <input
-            type="number"
+            type="text"
             value={formData.area}
-            onChange={(e) => setFormData({ ...formData, area: e.target.value })}
-            className="w-full p-3 border rounded-lg"
+            onChange={(e) => handleNumberInput(e, 'area')}
+            placeholder="Площадь"
+            className="w-full p-2 border rounded-lg"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium">Этаж</label>
           <input
-            type="number"
+            type="text"
             value={formData.floor}
-            onChange={(e) => setFormData({ ...formData, floor: e.target.value })}
-            className="w-full p-3 border rounded-lg"
+            onChange={(e) => handleNumberInput(e, 'floor')}
+            placeholder="Этаж"
+            className="w-full p-2 border rounded-lg"
           />
         </div>
 
@@ -202,17 +252,31 @@ const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
         </div>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium mb-2">Свободные даты</label>
-        <DatePicker
-          selected={null}
-          onChange={(dates) => setFormData({ ...formData, availableDates: dates })}
-          startDate={formData.availableDates[0]}
-          endDate={formData.availableDates[formData.availableDates.length - 1]}
-          selectsRange
-          inline
-          className="w-full"
-        />
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium mb-2">Дата начала</label>
+          <input
+            type="date"
+            value={formData.availableDates.start}
+            onChange={(e) => setFormData({
+              ...formData,
+              availableDates: { ...formData.availableDates, start: e.target.value }
+            })}
+            className="w-full p-2 border rounded-lg"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-2">Дата окончания</label>
+          <input
+            type="date"
+            value={formData.availableDates.end}
+            onChange={(e) => setFormData({
+              ...formData,
+              availableDates: { ...formData.availableDates, end: e.target.value }
+            })}
+            className="w-full p-2 border rounded-lg"
+          />
+        </div>
       </div>
 
       <button

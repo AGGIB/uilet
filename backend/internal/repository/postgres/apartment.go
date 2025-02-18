@@ -19,27 +19,29 @@ func NewApartmentRepository(db *sql.DB) *ApartmentRepository {
 }
 
 func (r *ApartmentRepository) Create(apartment *model.Apartment) error {
+	query := `
+        INSERT INTO apartments (
+            user_id, complex, rooms, price, description, 
+            address, area, floor, amenities, available_dates,
+            location, rules, created_at, updated_at,
+            images, image_types, image_count
+        )
+        VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 
+            $11, $12, $13, $14, $15::bytea[], $16::varchar[], $17
+        )
+        RETURNING id
+    `
+
 	amenitiesJSON, err := json.Marshal(apartment.Amenities)
 	if err != nil {
 		return fmt.Errorf("error marshaling amenities: %v", err)
 	}
 
-	var imagesArray interface{}
-	if len(apartment.Images) > 0 {
-		imagesArray = pq.Array(apartment.Images)
-	} else {
-		imagesArray = pq.Array([]string{})
+	availableDatesJSON, err := json.Marshal(apartment.AvailableDates)
+	if err != nil {
+		return fmt.Errorf("error marshaling available dates: %v", err)
 	}
-
-	query := `
-        INSERT INTO apartments (
-            user_id, complex, rooms, price, description, 
-            address, area, floor, images, amenities, 
-            created_at, updated_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        RETURNING id
-    `
 
 	err = r.db.QueryRow(
 		query,
@@ -51,10 +53,15 @@ func (r *ApartmentRepository) Create(apartment *model.Apartment) error {
 		apartment.Address,
 		apartment.Area,
 		apartment.Floor,
-		imagesArray,
 		amenitiesJSON,
+		availableDatesJSON,
+		apartment.Location,
+		apartment.Rules,
 		apartment.CreatedAt,
 		apartment.UpdatedAt,
+		pq.Array(apartment.Images),
+		pq.Array(apartment.ImageTypes),
+		apartment.ImageCount,
 	).Scan(&apartment.ID)
 
 	if err != nil {
@@ -67,7 +74,10 @@ func (r *ApartmentRepository) Create(apartment *model.Apartment) error {
 func (r *ApartmentRepository) GetByUserID(userID uint) ([]model.Apartment, error) {
 	query := `
         SELECT id, user_id, complex, rooms, price, description,
-               address, area, floor, images, amenities, created_at, updated_at
+               address, area, floor, amenities, created_at, updated_at,
+               available_dates, location, rules,
+               images, image_types,
+               COALESCE(array_length(images, 1), 0) as image_count
         FROM apartments
         WHERE user_id = $1
         ORDER BY created_at DESC
@@ -82,8 +92,7 @@ func (r *ApartmentRepository) GetByUserID(userID uint) ([]model.Apartment, error
 	var apartments []model.Apartment
 	for rows.Next() {
 		var apt model.Apartment
-		var amenitiesJSON []byte
-		var images []string
+		var amenitiesJSON, availableDatesJSON []byte
 
 		err := rows.Scan(
 			&apt.ID,
@@ -95,20 +104,26 @@ func (r *ApartmentRepository) GetByUserID(userID uint) ([]model.Apartment, error
 			&apt.Address,
 			&apt.Area,
 			&apt.Floor,
-			pq.Array(&images),
 			&amenitiesJSON,
 			&apt.CreatedAt,
 			&apt.UpdatedAt,
+			&availableDatesJSON,
+			&apt.Location,
+			&apt.Rules,
+			pq.Array(&apt.Images),
+			pq.Array(&apt.ImageTypes),
+			&apt.ImageCount,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning apartment: %v", err)
 		}
 
-		apt.Images = images
-
-		err = json.Unmarshal(amenitiesJSON, &apt.Amenities)
-		if err != nil {
+		if err := json.Unmarshal(amenitiesJSON, &apt.Amenities); err != nil {
 			return nil, fmt.Errorf("error unmarshaling amenities: %v", err)
+		}
+
+		if err := json.Unmarshal(availableDatesJSON, &apt.AvailableDates); err != nil {
+			return nil, fmt.Errorf("error unmarshaling available dates: %v", err)
 		}
 
 		apartments = append(apartments, apt)
@@ -118,19 +133,18 @@ func (r *ApartmentRepository) GetByUserID(userID uint) ([]model.Apartment, error
 }
 
 func (r *ApartmentRepository) Update(userID uint, apartmentID string, apartment *model.UpdateApartmentInput) error {
-	amenitiesJSON, err := json.Marshal(apartment.Amenities)
-	if err != nil {
-		return fmt.Errorf("error marshaling amenities: %v", err)
-	}
-
 	query := `
         UPDATE apartments 
         SET complex = $1, rooms = $2, price = $3, description = $4,
             address = $5, area = $6, floor = $7, amenities = $8,
-            available_dates = $9, location = $10, features = $11,
-            rules = $12, updated_at = $13
-        WHERE id = $14 AND user_id = $15
+            location = $9, rules = $10, updated_at = $11
+        WHERE id = $12 AND user_id = $13
     `
+
+	amenitiesJSON, err := json.Marshal(apartment.Amenities)
+	if err != nil {
+		return fmt.Errorf("error marshaling amenities: %v", err)
+	}
 
 	result, err := r.db.Exec(
 		query,
@@ -142,9 +156,7 @@ func (r *ApartmentRepository) Update(userID uint, apartmentID string, apartment 
 		apartment.Area,
 		apartment.Floor,
 		amenitiesJSON,
-		apartment.AvailableDates,
 		apartment.Location,
-		apartment.Features,
 		apartment.Rules,
 		time.Now(),
 		apartmentID,
@@ -169,12 +181,14 @@ func (r *ApartmentRepository) Update(userID uint, apartmentID string, apartment 
 
 func (r *ApartmentRepository) GetByID(userID uint, apartmentID string) (*model.Apartment, error) {
 	var apartment model.Apartment
-	var amenitiesJSON []byte
+	var amenitiesJSON, availableDatesJSON []byte
 
 	query := `
         SELECT id, user_id, complex, rooms, price, description,
-               address, area, floor, images, amenities, created_at, updated_at,
-               available_dates, location, features, rules
+               address, area, floor, amenities, created_at, updated_at,
+               available_dates, location, rules,
+               COALESCE(array_length(images, 1), 0) as image_count,
+               images, image_types
         FROM apartments
         WHERE id = $1 AND user_id = $2
     `
@@ -189,14 +203,15 @@ func (r *ApartmentRepository) GetByID(userID uint, apartmentID string) (*model.A
 		&apartment.Address,
 		&apartment.Area,
 		&apartment.Floor,
-		&apartment.Images,
 		&amenitiesJSON,
 		&apartment.CreatedAt,
 		&apartment.UpdatedAt,
-		&apartment.AvailableDates,
+		&availableDatesJSON,
 		&apartment.Location,
-		&apartment.Features,
 		&apartment.Rules,
+		&apartment.ImageCount,
+		pq.Array(&apartment.Images),
+		pq.Array(&apartment.ImageTypes),
 	)
 
 	if err != nil {
@@ -208,19 +223,79 @@ func (r *ApartmentRepository) GetByID(userID uint, apartmentID string) (*model.A
 		return nil, fmt.Errorf("error unmarshaling amenities: %v", err)
 	}
 
+	err = json.Unmarshal(availableDatesJSON, &apartment.AvailableDates)
+	if err != nil {
+		return nil, fmt.Errorf("error unmarshaling available dates: %v", err)
+	}
+
 	return &apartment, nil
 }
 
-func (r *ApartmentRepository) AddImages(userID uint, apartmentID string, imageURLs []string) error {
-	query := `
+func (r *ApartmentRepository) AddImages(userID uint, apartmentID string, imageData [][]byte, imageTypes []string) error {
+	fmt.Printf("Adding images for apartment %s: count=%d\n", apartmentID, len(imageData)) // Для отладки
+
+	updateQuery := `
         UPDATE apartments
-        SET images = array_cat(images, $1)
-        WHERE id = $2 AND user_id = $3
+        SET images = $1::bytea[],
+            image_types = $2::varchar[],
+            image_count = array_length($1::bytea[], 1)
+        WHERE id = $3 AND user_id = $4
+        RETURNING image_count
     `
 
-	result, err := r.db.Exec(query, imageURLs, apartmentID, userID)
+	var newCount int
+	err := r.db.QueryRow(
+		updateQuery,
+		pq.Array(imageData),
+		pq.Array(imageTypes),
+		apartmentID,
+		userID,
+	).Scan(&newCount)
+
 	if err != nil {
-		return fmt.Errorf("error adding images: %v", err)
+		return fmt.Errorf("error updating images: %v", err)
+	}
+
+	fmt.Printf("Successfully updated images. New count: %d\n", newCount) // Для отладки
+	return nil
+}
+
+func (r *ApartmentRepository) GetImage(apartmentID string, index int) ([]byte, string, error) {
+	fmt.Printf("Getting image %d for apartment %s\n", index, apartmentID) // Для отладки
+
+	query := `
+        SELECT 
+            images[$1],
+            image_types[$1]
+        FROM apartments
+        WHERE id = $2
+    `
+
+	var imageData []byte
+	var imageType string
+
+	err := r.db.QueryRow(query, index+1, apartmentID).Scan(&imageData, &imageType)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, "", fmt.Errorf("apartment not found")
+		}
+		return nil, "", fmt.Errorf("error getting image: %v", err)
+	}
+
+	if imageData == nil {
+		return nil, "", fmt.Errorf("image not found")
+	}
+
+	fmt.Printf("Successfully retrieved image. Type: %s, Size: %d bytes\n", imageType, len(imageData)) // Для отладки
+	return imageData, imageType, nil
+}
+
+func (r *ApartmentRepository) Delete(userID uint, apartmentID string) error {
+	query := `DELETE FROM apartments WHERE id = $1 AND user_id = $2`
+
+	result, err := r.db.Exec(query, apartmentID, userID)
+	if err != nil {
+		return fmt.Errorf("error deleting apartment: %v", err)
 	}
 
 	rows, err := result.RowsAffected()
