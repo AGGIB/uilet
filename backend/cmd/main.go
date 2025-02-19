@@ -58,7 +58,7 @@ func main() {
 	// Настройка CORS
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:3000"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
@@ -88,6 +88,10 @@ func main() {
 		api.POST("/apartments/:id/images", apartmentHandler.UploadImages)
 		api.DELETE("/apartments/:id", apartmentHandler.Delete)
 		api.DELETE("/apartments/:id/images/:index", apartmentHandler.DeleteImage)
+		apartmentRoutes := api.Group("/apartments")
+		{
+			apartmentRoutes.PATCH("/:id/toggle-active", apartmentHandler.ToggleActive)
+		}
 	}
 
 	// В функции main после инициализации роутера

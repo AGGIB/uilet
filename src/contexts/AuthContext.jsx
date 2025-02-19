@@ -13,9 +13,16 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       const response = await api.signIn({ email, password });
-      localStorage.setItem('token', response.token);
-      setCurrentUser({ email });
+      console.log('Login response:', response); // Для отладки
+      
+      if (response.token) {
+        localStorage.setItem('token', response.token);
+        setCurrentUser({ email });
+      } else {
+        throw new Error('Token not received');
+      }
     } catch (error) {
+      console.error('Login error:', error);
       throw error;
     } finally {
       setLoading(false);

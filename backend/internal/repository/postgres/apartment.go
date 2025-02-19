@@ -22,13 +22,13 @@ func (r *ApartmentRepository) Create(apartment *model.Apartment) error {
 	query := `
         INSERT INTO apartments (
             user_id, complex, rooms, price, description, 
-            address, area, floor, amenities, available_dates,
+            address, area, floor, amenities,
             location, rules, created_at, updated_at,
             images, image_types, image_count
         )
         VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 
-            $11, $12, $13, $14, $15::bytea[], $16::varchar[], $17
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, 
+            $10, $11, $12, $13, $14::bytea[], $15::varchar[], $16
         )
         RETURNING id
     `
@@ -36,11 +36,6 @@ func (r *ApartmentRepository) Create(apartment *model.Apartment) error {
 	amenitiesJSON, err := json.Marshal(apartment.Amenities)
 	if err != nil {
 		return fmt.Errorf("error marshaling amenities: %v", err)
-	}
-
-	availableDatesJSON, err := json.Marshal(apartment.AvailableDates)
-	if err != nil {
-		return fmt.Errorf("error marshaling available dates: %v", err)
 	}
 
 	err = r.db.QueryRow(
@@ -54,7 +49,6 @@ func (r *ApartmentRepository) Create(apartment *model.Apartment) error {
 		apartment.Area,
 		apartment.Floor,
 		amenitiesJSON,
-		availableDatesJSON,
 		apartment.Location,
 		apartment.Rules,
 		apartment.CreatedAt,
@@ -73,14 +67,30 @@ func (r *ApartmentRepository) Create(apartment *model.Apartment) error {
 
 func (r *ApartmentRepository) GetByUserID(userID uint) ([]model.Apartment, error) {
 	query := `
-        SELECT id, user_id, complex, rooms, price, description,
-               address, area, floor, amenities, created_at, updated_at,
-               available_dates, location, rules,
-               images, image_types,
-               COALESCE(array_length(images, 1), 0) as image_count
-        FROM apartments
-        WHERE user_id = $1
-        ORDER BY created_at DESC
+        SELECT 
+            a.id, a.user_id, a.complex, a.rooms, a.price, 
+            a.description, a.address, a.area, a.floor, 
+            a.amenities::text, a.location, a.rules, 
+            a.created_at, a.updated_at,
+            a.images, a.image_types, a.image_count,
+            COALESCE(
+                json_agg(
+                    json_build_object(
+                        'id', av.id,
+                        'date_start', av.date_start,
+                        'date_end', av.date_end,
+                        'status', av.status,
+                        'source', av.source,
+                        'guest_name', av.guest_name
+                    )
+                ) FILTER (WHERE av.id IS NOT NULL),
+                '[]'
+            ) as availabilities
+        FROM apartments a
+        LEFT JOIN apartment_availability av ON a.id = av.apartment_id
+        WHERE a.user_id = $1
+        GROUP BY a.id
+        ORDER BY a.created_at DESC
     `
 
 	rows, err := r.db.Query(query, userID)
@@ -92,41 +102,39 @@ func (r *ApartmentRepository) GetByUserID(userID uint) ([]model.Apartment, error
 	var apartments []model.Apartment
 	for rows.Next() {
 		var apt model.Apartment
-		var amenitiesJSON, availableDatesJSON []byte
+		var amenitiesJSON []byte
+		var availabilitiesJSON string
+		apt.Amenities = make(map[string]bool)
 
 		err := rows.Scan(
-			&apt.ID,
-			&apt.UserID,
-			&apt.Complex,
-			&apt.Rooms,
-			&apt.Price,
-			&apt.Description,
-			&apt.Address,
-			&apt.Area,
-			&apt.Floor,
-			&amenitiesJSON,
-			&apt.CreatedAt,
-			&apt.UpdatedAt,
-			&availableDatesJSON,
-			&apt.Location,
-			&apt.Rules,
-			pq.Array(&apt.Images),
-			pq.Array(&apt.ImageTypes),
-			&apt.ImageCount,
+			&apt.ID, &apt.UserID, &apt.Complex, &apt.Rooms, &apt.Price,
+			&apt.Description, &apt.Address, &apt.Area, &apt.Floor,
+			&amenitiesJSON, &apt.Location, &apt.Rules,
+			&apt.CreatedAt, &apt.UpdatedAt,
+			pq.Array(&apt.Images), pq.Array(&apt.ImageTypes), &apt.ImageCount,
+			&availabilitiesJSON,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning apartment: %v", err)
 		}
 
+		// Парсим JSON с удобствами
 		if err := json.Unmarshal(amenitiesJSON, &apt.Amenities); err != nil {
-			return nil, fmt.Errorf("error unmarshaling amenities: %v", err)
+			return nil, fmt.Errorf("error parsing amenities: %v", err)
 		}
 
-		if err := json.Unmarshal(availableDatesJSON, &apt.AvailableDates); err != nil {
-			return nil, fmt.Errorf("error unmarshaling available dates: %v", err)
+		// Парсим JSON с доступностью
+		var availabilities []model.Availability
+		if err := json.Unmarshal([]byte(availabilitiesJSON), &availabilities); err != nil {
+			return nil, fmt.Errorf("error parsing availabilities: %v", err)
 		}
+		apt.Availabilities = availabilities
 
 		apartments = append(apartments, apt)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %v", err)
 	}
 
 	return apartments, nil
@@ -137,19 +145,13 @@ func (r *ApartmentRepository) Update(userID uint, apartmentID string, apartment 
         UPDATE apartments 
         SET complex = $1, rooms = $2, price = $3, description = $4,
             address = $5, area = $6, floor = $7, amenities = $8,
-            location = $9, rules = $10, updated_at = $11,
-            available_dates = $12
-        WHERE id = $13 AND user_id = $14
+            location = $9, rules = $10, updated_at = $11
+        WHERE id = $12 AND user_id = $13
     `
 
 	amenitiesJSON, err := json.Marshal(apartment.Amenities)
 	if err != nil {
 		return fmt.Errorf("error marshaling amenities: %v", err)
-	}
-
-	availableDatesJSON, err := json.Marshal(apartment.AvailableDates)
-	if err != nil {
-		return fmt.Errorf("error marshaling available dates: %v", err)
 	}
 
 	result, err := r.db.Exec(
@@ -165,7 +167,6 @@ func (r *ApartmentRepository) Update(userID uint, apartmentID string, apartment 
 		apartment.Location,
 		apartment.Rules,
 		time.Now(),
-		availableDatesJSON,
 		apartmentID,
 		userID,
 	)
@@ -188,18 +189,36 @@ func (r *ApartmentRepository) Update(userID uint, apartmentID string, apartment 
 
 func (r *ApartmentRepository) GetByID(userID uint, apartmentID string) (*model.Apartment, error) {
 	var apartment model.Apartment
-	var amenitiesJSON, availableDatesJSON []byte
+	var amenitiesJSON []byte
 
 	query := `
-        SELECT id, user_id, complex, rooms, price, description,
-               address, area, floor, amenities, created_at, updated_at,
-               available_dates, location, rules,
-               COALESCE(array_length(images, 1), 0) as image_count,
-               images, image_types
-        FROM apartments
-        WHERE id = $1 AND user_id = $2
+        SELECT 
+            a.id, a.user_id, a.complex, a.rooms, a.price, 
+            a.description, a.address, a.area, a.floor, 
+            a.amenities, a.location, a.rules,
+            a.created_at, a.updated_at,
+            COALESCE(array_length(a.images, 1), 0) as image_count,
+            a.images, a.image_types,
+            COALESCE(
+                json_agg(
+                    json_build_object(
+                        'id', av.id,
+                        'date_start', av.date_start,
+                        'date_end', av.date_end,
+                        'status', av.status,
+                        'source', av.source,
+                        'guest_name', av.guest_name
+                    )
+                ) FILTER (WHERE av.id IS NOT NULL),
+                '[]'
+            ) as availabilities
+        FROM apartments a
+        LEFT JOIN apartment_availability av ON a.id = av.apartment_id
+        WHERE a.id = $1 AND a.user_id = $2
+        GROUP BY a.id
     `
 
+	var availabilitiesJSON string
 	err := r.db.QueryRow(query, apartmentID, userID).Scan(
 		&apartment.ID,
 		&apartment.UserID,
@@ -211,50 +230,51 @@ func (r *ApartmentRepository) GetByID(userID uint, apartmentID string) (*model.A
 		&apartment.Area,
 		&apartment.Floor,
 		&amenitiesJSON,
-		&apartment.CreatedAt,
-		&apartment.UpdatedAt,
-		&availableDatesJSON,
 		&apartment.Location,
 		&apartment.Rules,
+		&apartment.CreatedAt,
+		&apartment.UpdatedAt,
 		&apartment.ImageCount,
 		pq.Array(&apartment.Images),
 		pq.Array(&apartment.ImageTypes),
+		&availabilitiesJSON,
 	)
 
 	if err != nil {
 		return nil, fmt.Errorf("error getting apartment: %v", err)
 	}
 
-	err = json.Unmarshal(amenitiesJSON, &apartment.Amenities)
-	if err != nil {
+	if err := json.Unmarshal(amenitiesJSON, &apartment.Amenities); err != nil {
 		return nil, fmt.Errorf("error unmarshaling amenities: %v", err)
 	}
 
-	err = json.Unmarshal(availableDatesJSON, &apartment.AvailableDates)
-	if err != nil {
-		return nil, fmt.Errorf("error unmarshaling available dates: %v", err)
+	var availabilities []model.Availability
+	if err := json.Unmarshal([]byte(availabilitiesJSON), &availabilities); err != nil {
+		return nil, fmt.Errorf("error parsing availabilities: %v", err)
 	}
+	apartment.Availabilities = availabilities
 
 	return &apartment, nil
 }
 
 func (r *ApartmentRepository) AddImages(userID uint, apartmentID string, imageData [][]byte, imageTypes []string) error {
-	// Получаем текущие изображения
-	query := `
-        SELECT images, image_types, image_count
-        FROM apartments
-        WHERE id = $1 AND user_id = $2
-    `
-
+	// Сначала получаем текущие изображения
 	var currentImages [][]byte
 	var currentTypes []string
 	var currentCount int
 
+	query := `
+        SELECT images, image_types, image_count 
+        FROM apartments 
+        WHERE id = $1 AND user_id = $2
+    `
 	err := r.db.QueryRow(query, apartmentID, userID).Scan(
 		pq.Array(&currentImages),
 		pq.Array(&currentTypes),
 		&currentCount,
 	)
+
+	// Если нет существующих изображений, используем пустые массивы
 	if err != nil && err != sql.ErrNoRows {
 		return fmt.Errorf("error getting current images: %v", err)
 	}
@@ -262,16 +282,14 @@ func (r *ApartmentRepository) AddImages(userID uint, apartmentID string, imageDa
 	// Добавляем новые изображения к существующим
 	allImages := append(currentImages, imageData...)
 	allTypes := append(currentTypes, imageTypes...)
-	newCount := len(allImages)
 
-	fmt.Printf("Current images: %d, Adding: %d, New total: %d\n", currentCount, len(imageData), newCount)
-
-	// Обновляем запись с явным указанием типов и нового количества
+	// Обновляем запись в базе данных
 	updateQuery := `
         UPDATE apartments
         SET images = $1::bytea[],
             image_types = $2::varchar[],
-            image_count = $3
+            image_count = $3,
+            updated_at = CURRENT_TIMESTAMP
         WHERE id = $4 AND user_id = $5
     `
 
@@ -279,7 +297,7 @@ func (r *ApartmentRepository) AddImages(userID uint, apartmentID string, imageDa
 		updateQuery,
 		pq.Array(allImages),
 		pq.Array(allTypes),
-		newCount,
+		len(allImages), // Используем актуальное количество изображений
 		apartmentID,
 		userID,
 	)
@@ -296,7 +314,6 @@ func (r *ApartmentRepository) AddImages(userID uint, apartmentID string, imageDa
 		return fmt.Errorf("apartment not found or not owned by user")
 	}
 
-	fmt.Printf("Successfully updated images. New count: %d\n", newCount)
 	return nil
 }
 
@@ -398,6 +415,57 @@ func (r *ApartmentRepository) DeleteImage(userID uint, apartmentID string, index
 	)
 	if err != nil {
 		return fmt.Errorf("error updating images: %v", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error getting rows affected: %v", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("apartment not found or not owned by user")
+	}
+
+	return nil
+}
+
+func (r *ApartmentRepository) DeleteAvailabilities(apartmentID uint) error {
+	query := `DELETE FROM apartment_availability WHERE apartment_id = $1`
+	_, err := r.db.Exec(query, apartmentID)
+	return err
+}
+
+func (r *ApartmentRepository) CreateAvailability(apartmentID uint, availability *model.Availability) error {
+	query := `
+		INSERT INTO apartment_availability 
+		(apartment_id, date_start, date_end, status, source, guest_name, guest_phone)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING id
+	`
+
+	return r.db.QueryRow(
+		query,
+		apartmentID,
+		availability.DateStart,
+		availability.DateEnd,
+		availability.Status,
+		availability.Source,
+		availability.GuestName,
+		availability.GuestPhone,
+	).Scan(&availability.ID)
+}
+
+func (r *ApartmentRepository) ToggleActive(userID uint, apartmentID string) error {
+	query := `
+        UPDATE apartments 
+        SET is_active = NOT is_active,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1 AND user_id = $2
+    `
+
+	result, err := r.db.Exec(query, apartmentID, userID)
+	if err != nil {
+		return fmt.Errorf("error updating apartment status: %v", err)
 	}
 
 	rows, err := result.RowsAffected()

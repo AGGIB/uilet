@@ -44,6 +44,14 @@ func (h *ApartmentHandler) Create(c *gin.Context) {
 		return
 	}
 
+	// Если есть данные о доступности, сохраняем их
+	if len(input.Availabilities) > 0 {
+		if err := h.service.UpdateAvailabilities(apartmentID, input.Availabilities); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to update availabilities: %v", err)})
+			return
+		}
+	}
+
 	// Обрабатываем изображения
 	files := form.File["images"]
 	fmt.Printf("Received %d images\n", len(files)) // Для отладки
@@ -96,11 +104,17 @@ func isAllowedImageType(contentType string) bool {
 }
 
 func (h *ApartmentHandler) GetUserApartments(c *gin.Context) {
-	userID, _ := c.Get("userID")
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
 
-	apartments, err := h.service.GetUserApartments(userID.(uint))
+	apartments, err := h.service.GetByUserID(userID.(uint))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": fmt.Sprintf("failed to get apartments: %v", err),
+		})
 		return
 	}
 
@@ -249,4 +263,17 @@ func (h *ApartmentHandler) DeleteImage(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Image deleted successfully"})
+}
+
+func (h *ApartmentHandler) ToggleActive(c *gin.Context) {
+	userID, _ := c.Get("userID")
+	apartmentID := c.Param("id")
+
+	err := h.service.ToggleActive(userID.(uint), apartmentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to toggle apartment status: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "status updated successfully"})
 }

@@ -4,24 +4,8 @@ import { FaUpload, FaTimes } from 'react-icons/fa';
 const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
   const [formData, setFormData] = useState(() => {
     if (apartment) {
-      const formatDateForInput = (dateStr) => {
-        if (!dateStr) return '';
-        try {
-          const date = new Date(dateStr);
-          if (isNaN(date.getTime())) return '';
-          return date.toISOString().split('T')[0];
-        } catch (e) {
-          console.error('Error formatting date:', e);
-          return '';
-        }
-      };
-
       return {
         ...apartment,
-        availableDates: {
-          start: formatDateForInput(apartment.available_dates?.start),
-          end: formatDateForInput(apartment.available_dates?.end)
-        },
         amenities: apartment.amenities || {
           wifi: false,
           parking: false,
@@ -47,12 +31,7 @@ const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
         ac: false,
         washer: false,
         kitchen: false,
-      },
-      availableDates: {
-        start: '',
-        end: ''
-      },
-      images: []
+      }
     };
   });
 
@@ -60,7 +39,7 @@ const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
   const [previewUrls, setPreviewUrls] = useState([]);
   const [existingImages, setExistingImages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  
+
   useEffect(() => {
     if (apartment && apartment.image_count > 0) {
       // Загружаем существующие изображения
@@ -122,33 +101,28 @@ const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
     setIsLoading(true);
     
     try {
-      if (isEdit) {
-        // Если это редактирование
-        const formDataToSend = new FormData();
-        const jsonData = {
-          complex: formData.complex,
-          rooms: parseInt(String(formData.rooms).replace(/[^0-9]/g, '')) || 0,
-          price: parseInt(String(formData.price).replace(/[^0-9]/g, '')) || 0,
-          area: parseFloat(String(formData.area).replace(/[^0-9.]/g, '')) || 0,
-          floor: parseInt(String(formData.floor).replace(/[^0-9]/g, '')) || 0,
-          description: formData.description || '',
-          address: formData.address || '',
-          location: formData.location || '',
-          rules: formData.rules || '',
-          amenities: formData.amenities || {},
-          available_dates: {
-            start: formData.availableDates.start 
-              ? new Date(formData.availableDates.start).toISOString()
-              : '',
-            end: formData.availableDates.end 
-              ? new Date(formData.availableDates.end).toISOString()
-              : ''
-          }
-        };
+      const formDataToSend = new FormData();
+      const jsonData = {
+        complex: formData.complex,
+        rooms: parseInt(String(formData.rooms).replace(/[^0-9]/g, '')) || 0,
+        price: parseInt(String(formData.price).replace(/[^0-9]/g, '')) || 0,
+        area: parseFloat(String(formData.area).replace(/[^0-9.]/g, '')) || 0,
+        floor: parseInt(String(formData.floor).replace(/[^0-9]/g, '')) || 0,
+        description: formData.description || '',
+        address: formData.address || '',
+        location: formData.location || '',
+        rules: formData.rules || '',
+        amenities: formData.amenities || {}
+      };
 
-        formDataToSend.append('data', JSON.stringify(jsonData));
-        
-        // Сначала обновляем основные данные
+      formDataToSend.append('data', JSON.stringify(jsonData));
+      
+      // Добавляем все выбранные файлы
+      selectedFiles.forEach((file, index) => {
+        formDataToSend.append(`images`, file); // Используем одно и то же имя поля для всех файлов
+      });
+
+      if (isEdit) {
         const response = await fetch(`/api/apartments/${apartment.id}`, {
           method: 'PUT',
           headers: {
@@ -161,74 +135,8 @@ const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
           throw new Error('Failed to update apartment');
         }
 
-        // Если есть новые изображения, загружаем их
-        if (selectedFiles.length > 0) {
-          const imageFormData = new FormData();
-          selectedFiles.forEach(file => {
-            imageFormData.append('images', file);
-          });
-
-          const imageResponse = await fetch(`/api/apartments/${apartment.id}/images`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
-            body: imageFormData
-          });
-
-          if (!imageResponse.ok) {
-            throw new Error('Failed to upload images');
-          }
-
-          // Увеличиваем задержку для уверенности, что сервер обработал все изменения
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-
-        // Получаем обновленные данные объявления
-        const updatedResponse = await fetch(`/api/apartments/${apartment.id}`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        });
-
-        if (!updatedResponse.ok) {
-          throw new Error('Failed to fetch updated apartment');
-        }
-
-        const updatedData = await updatedResponse.json();
-        console.log('Updated apartment data:', updatedData);
-
-        // Сигнализируем об успешном обновлении
         onSubmit({ type: 'update', id: apartment.id });
       } else {
-        // Если это создание нового объявления
-        const formDataToSend = new FormData();
-        const jsonData = {
-          complex: formData.complex,
-          rooms: parseInt(String(formData.rooms).replace(/[^0-9]/g, '')) || 0,
-          price: parseInt(String(formData.price).replace(/[^0-9]/g, '')) || 0,
-          area: parseFloat(String(formData.area).replace(/[^0-9.]/g, '')) || 0,
-          floor: parseInt(String(formData.floor).replace(/[^0-9]/g, '')) || 0,
-          description: formData.description || '',
-          address: formData.address || '',
-          location: formData.location || '',
-          rules: formData.rules || '',
-          amenities: formData.amenities || {},
-          available_dates: {
-            start: formData.availableDates.start 
-              ? new Date(formData.availableDates.start).toISOString()
-              : '',
-            end: formData.availableDates.end 
-              ? new Date(formData.availableDates.end).toISOString()
-              : ''
-          }
-        };
-
-        formDataToSend.append('data', JSON.stringify(jsonData));
-        selectedFiles.forEach(file => {
-          formDataToSend.append('images', file);
-        });
-
         await onSubmit({ type: 'create', data: formDataToSend });
       }
     } catch (error) {
@@ -407,45 +315,6 @@ const ApartmentForm = ({ apartment, onSubmit, isEdit = false }) => {
               className="hidden"
             />
           </label>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium mb-2">Дата начала</label>
-          <input
-            type="date"
-            value={formData.availableDates.start}
-            onChange={(e) => {
-              console.log('Start date changed:', e.target.value); // Для отладки
-              setFormData({
-                ...formData,
-                availableDates: { 
-                  ...formData.availableDates, 
-                  start: e.target.value 
-                }
-              });
-            }}
-            className="w-full p-2 border rounded-lg"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-2">Дата окончания</label>
-          <input
-            type="date"
-            value={formData.availableDates.end}
-            onChange={(e) => {
-              console.log('End date changed:', e.target.value); // Для отладки
-              setFormData({
-                ...formData,
-                availableDates: { 
-                  ...formData.availableDates, 
-                  end: e.target.value 
-                }
-              });
-            }}
-            className="w-full p-2 border rounded-lg"
-          />
         </div>
       </div>
 
