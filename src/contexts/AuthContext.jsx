@@ -7,17 +7,17 @@ export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const login = async (email, password) => {
     setLoading(true);
     try {
       const response = await api.signIn({ email, password });
-      console.log('Login response:', response); // Для отладки
       
       if (response.token) {
         localStorage.setItem('token', response.token);
-        setCurrentUser({ email });
+        const profile = await api.getProfile();
+        setCurrentUser(profile);
       } else {
         throw new Error('Token not received');
       }
@@ -34,7 +34,8 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await api.signUp({ email, password });
       localStorage.setItem('token', response.token);
-      setCurrentUser({ email });
+      const profile = await api.getProfile();
+      setCurrentUser(profile);
     } catch (error) {
       throw error;
     } finally {
@@ -47,13 +48,24 @@ export const AuthProvider = ({ children }) => {
     setCurrentUser(null);
   };
 
-  // Проверяем localStorage при загрузке
+  // Проверяем токен и получаем данные пользователя при загрузке
   React.useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      // TODO: Добавить проверку токена
-      setCurrentUser({ email: 'user@example.com' }); // Временное решение
-    }
+    const validateAuth = async () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          const profile = await api.getProfile();
+          setCurrentUser(profile);
+        } catch (error) {
+          console.error('Token validation error:', error);
+          localStorage.removeItem('token');
+          setCurrentUser(null);
+        }
+      }
+      setLoading(false);
+    };
+
+    validateAuth();
   }, []);
 
   const value = {
@@ -66,7 +78,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider value={value}>
-      {children}
+      {!loading && children}
     </AuthContext.Provider>
   );
 }; 

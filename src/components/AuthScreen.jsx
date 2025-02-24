@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FaRegEyeSlash, FaRegEye } from 'react-icons/fa';
+import { FaRegEyeSlash, FaRegEye, FaArrowLeft } from 'react-icons/fa';
 import Logo from '../assets/logo';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -36,7 +36,15 @@ const AuthScreen = ({ isRegister = false }) => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 py-12 px-4">
-      <div className="max-w-md w-full space-y-8 bg-white rounded-2xl p-8 shadow-lg">
+      <div className="max-w-md w-full space-y-8 bg-white rounded-2xl p-8 shadow-lg relative">
+        <button
+          onClick={() => navigate('/')}
+          className="absolute left-8 top-8 flex items-center gap-2 text-gray-600 hover:text-gray-800 transition-colors"
+        >
+          <FaArrowLeft />
+          <span>Назад</span>
+        </button>
+        
         <div className="text-center">
           <Logo />
           <h2 className="mt-6 text-3xl font-bold">

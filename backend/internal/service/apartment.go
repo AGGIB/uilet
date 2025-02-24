@@ -29,6 +29,7 @@ func (s *ApartmentService) Create(userID uint, input model.CreateApartmentInput)
 		Amenities:   input.Amenities,
 		Location:    input.Location,
 		Rules:       input.Rules,
+		IsActive:    true,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}

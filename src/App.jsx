@@ -1,5 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { ModalProvider } from './contexts/ModalContext';
 import LandingPage from './components/LandingPage';
 import AuthScreen from './components/AuthScreen';
@@ -13,8 +15,8 @@ import Footer from './components/Footer';
 
 function App() {
   return (
-    <Router>
-      <AuthProvider>
+    <AuthProvider>
+      <Router>
         <ModalProvider>
           <div className="min-h-screen flex flex-col">
             <div className="flex-1">
@@ -49,8 +51,20 @@ function App() {
             <Footer />
           </div>
         </ModalProvider>
-      </AuthProvider>
-    </Router>
+      </Router>
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="light"
+      />
+    </AuthProvider>
   );
 }
 

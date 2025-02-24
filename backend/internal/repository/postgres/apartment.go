@@ -8,6 +8,7 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/yourusername/uilet/internal/model"
+	"github.com/yourusername/uilet/internal/utils"
 )
 
 type ApartmentRepository struct {
@@ -24,11 +25,11 @@ func (r *ApartmentRepository) Create(apartment *model.Apartment) error {
             user_id, complex, rooms, price, description, 
             address, area, floor, amenities,
             location, rules, created_at, updated_at,
-            images, image_types, image_count
+            images, image_types, image_count, is_active
         )
         VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, 
-            $10, $11, $12, $13, $14::bytea[], $15::varchar[], $16
+            $10, $11, $12, $13, $14::bytea[], $15::varchar[], COALESCE($16, 0), $17
         )
         RETURNING id
     `
@@ -56,6 +57,7 @@ func (r *ApartmentRepository) Create(apartment *model.Apartment) error {
 		pq.Array(apartment.Images),
 		pq.Array(apartment.ImageTypes),
 		apartment.ImageCount,
+		apartment.IsActive,
 	).Scan(&apartment.ID)
 
 	if err != nil {
@@ -71,8 +73,10 @@ func (r *ApartmentRepository) GetByUserID(userID uint) ([]model.Apartment, error
             a.id, a.user_id, a.complex, a.rooms, a.price, 
             a.description, a.address, a.area, a.floor, 
             a.amenities::text, a.location, a.rules, 
-            a.created_at, a.updated_at,
-            a.images, a.image_types, a.image_count,
+            a.is_active, a.created_at, a.updated_at,
+            COALESCE(array_length(a.images, 1), 0) as image_count,
+            NULL::bytea[] as images, -- Не загружаем изображения в списке
+            a.image_types,
             COALESCE(
                 json_agg(
                     json_build_object(
@@ -110,8 +114,10 @@ func (r *ApartmentRepository) GetByUserID(userID uint) ([]model.Apartment, error
 			&apt.ID, &apt.UserID, &apt.Complex, &apt.Rooms, &apt.Price,
 			&apt.Description, &apt.Address, &apt.Area, &apt.Floor,
 			&amenitiesJSON, &apt.Location, &apt.Rules,
-			&apt.CreatedAt, &apt.UpdatedAt,
-			pq.Array(&apt.Images), pq.Array(&apt.ImageTypes), &apt.ImageCount,
+			&apt.IsActive, &apt.CreatedAt, &apt.UpdatedAt,
+			&apt.ImageCount,
+			pq.Array(&apt.Images),
+			pq.Array(&apt.ImageTypes),
 			&availabilitiesJSON,
 		)
 		if err != nil {
@@ -141,12 +147,43 @@ func (r *ApartmentRepository) GetByUserID(userID uint) ([]model.Apartment, error
 }
 
 func (r *ApartmentRepository) Update(userID uint, apartmentID string, apartment *model.UpdateApartmentInput) error {
+	// First verify ownership
+	var owner uint
+	var isActive bool
+	err := r.db.QueryRow("SELECT user_id, is_active FROM apartments WHERE id = $1", apartmentID).Scan(&owner, &isActive)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("apartment not found")
+		}
+		return fmt.Errorf("error checking apartment ownership: %v", err)
+	}
+
+	if owner != userID {
+		return fmt.Errorf("unauthorized: apartment does not belong to user")
+	}
+
+	// Start transaction
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("error starting transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	// Get current images count
+	var currentImageCount int
+	err = tx.QueryRow("SELECT COALESCE(array_length(images, 1), 0) FROM apartments WHERE id = $1", apartmentID).Scan(&currentImageCount)
+	if err != nil {
+		return fmt.Errorf("error getting current image count: %v", err)
+	}
+
 	query := `
         UPDATE apartments 
         SET complex = $1, rooms = $2, price = $3, description = $4,
             address = $5, area = $6, floor = $7, amenities = $8,
-            location = $9, rules = $10, updated_at = $11
-        WHERE id = $12 AND user_id = $13
+            location = $9, rules = $10, updated_at = $11, is_active = $12,
+            image_count = $13
+        WHERE id = $14 AND user_id = $15
+        RETURNING id
     `
 
 	amenitiesJSON, err := json.Marshal(apartment.Amenities)
@@ -154,7 +191,8 @@ func (r *ApartmentRepository) Update(userID uint, apartmentID string, apartment 
 		return fmt.Errorf("error marshaling amenities: %v", err)
 	}
 
-	result, err := r.db.Exec(
+	var id string
+	err = tx.QueryRow(
 		query,
 		apartment.Complex,
 		apartment.Rooms,
@@ -167,21 +205,19 @@ func (r *ApartmentRepository) Update(userID uint, apartmentID string, apartment 
 		apartment.Location,
 		apartment.Rules,
 		time.Now(),
+		apartment.IsActive,
+		currentImageCount,
 		apartmentID,
 		userID,
-	)
+	).Scan(&id)
 
 	if err != nil {
 		return fmt.Errorf("error updating apartment: %v", err)
 	}
 
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("error getting rows affected: %v", err)
-	}
-
-	if rows == 0 {
-		return fmt.Errorf("apartment not found or not owned by user")
+	// Commit transaction
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("error committing transaction: %v", err)
 	}
 
 	return nil
@@ -196,7 +232,7 @@ func (r *ApartmentRepository) GetByID(userID uint, apartmentID string) (*model.A
             a.id, a.user_id, a.complex, a.rooms, a.price, 
             a.description, a.address, a.area, a.floor, 
             a.amenities, a.location, a.rules,
-            a.created_at, a.updated_at,
+            a.is_active, a.created_at, a.updated_at,
             COALESCE(array_length(a.images, 1), 0) as image_count,
             a.images, a.image_types,
             COALESCE(
@@ -232,6 +268,7 @@ func (r *ApartmentRepository) GetByID(userID uint, apartmentID string) (*model.A
 		&amenitiesJSON,
 		&apartment.Location,
 		&apartment.Rules,
+		&apartment.IsActive,
 		&apartment.CreatedAt,
 		&apartment.UpdatedAt,
 		&apartment.ImageCount,
@@ -258,92 +295,98 @@ func (r *ApartmentRepository) GetByID(userID uint, apartmentID string) (*model.A
 }
 
 func (r *ApartmentRepository) AddImages(userID uint, apartmentID string, imageData [][]byte, imageTypes []string) error {
-	// Сначала получаем текущие изображения
-	var currentImages [][]byte
-	var currentTypes []string
-	var currentCount int
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("error starting transaction: %v", err)
+	}
+	defer tx.Rollback()
 
-	query := `
-        SELECT images, image_types, image_count 
-        FROM apartments 
-        WHERE id = $1 AND user_id = $2
-    `
-	err := r.db.QueryRow(query, apartmentID, userID).Scan(
-		pq.Array(&currentImages),
-		pq.Array(&currentTypes),
-		&currentCount,
-	)
+	// Оптимизируем каждое изображение перед сохранением
+	optimizedImages := make([][]byte, 0, len(imageData))
+	optimizedTypes := make([]string, 0, len(imageData))
 
-	// Если нет существующих изображений, используем пустые массивы
-	if err != nil && err != sql.ErrNoRows {
-		return fmt.Errorf("error getting current images: %v", err)
+	for _, data := range imageData {
+		optimized, err := utils.OptimizeImage(data)
+		if err != nil {
+			return fmt.Errorf("error optimizing image: %v", err)
+		}
+		optimizedImages = append(optimizedImages, optimized)
+		optimizedTypes = append(optimizedTypes, "image/webp") // Всегда WebP после оптимизации
 	}
 
-	// Добавляем новые изображения к существующим
-	allImages := append(currentImages, imageData...)
-	allTypes := append(currentTypes, imageTypes...)
-
-	// Обновляем запись в базе данных
-	updateQuery := `
+	// Оптимизированный запрос для обновления изображений
+	query := `
         UPDATE apartments
-        SET images = $1::bytea[],
-            image_types = $2::varchar[],
-            image_count = $3,
-            updated_at = CURRENT_TIMESTAMP
+        SET images = CASE 
+            WHEN images IS NULL THEN $1::bytea[]
+            ELSE images || $1::bytea[]
+        END,
+        image_types = CASE 
+            WHEN image_types IS NULL THEN $2::varchar[]
+            ELSE image_types || $2::varchar[]
+        END,
+        image_count = COALESCE(array_length(images, 1), 0) + $3,
+        updated_at = CURRENT_TIMESTAMP
         WHERE id = $4 AND user_id = $5
+        RETURNING id
     `
 
-	result, err := r.db.Exec(
-		updateQuery,
-		pq.Array(allImages),
-		pq.Array(allTypes),
-		len(allImages), // Используем актуальное количество изображений
+	var id string
+	err = tx.QueryRow(
+		query,
+		pq.Array(optimizedImages),
+		pq.Array(optimizedTypes),
+		len(optimizedImages),
 		apartmentID,
 		userID,
-	)
+	).Scan(&id)
+
 	if err != nil {
 		return fmt.Errorf("error updating images: %v", err)
 	}
 
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("error getting rows affected: %v", err)
-	}
-
-	if rows == 0 {
-		return fmt.Errorf("apartment not found or not owned by user")
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("error committing transaction: %v", err)
 	}
 
 	return nil
 }
 
 func (r *ApartmentRepository) GetImage(apartmentID string, index int) ([]byte, string, error) {
-	fmt.Printf("Getting image %d for apartment %s\n", index, apartmentID) // Для отладки
+	// Проверяем кэш
+	cacheKey := fmt.Sprintf("%s-%d", apartmentID, index)
+	if data, contentType, found := utils.GetImageCache().Get(cacheKey); found {
+		return data, contentType, nil
+	}
 
-	query := `
-        SELECT 
-            images[$1],
-            image_types[$1]
-        FROM apartments
-        WHERE id = $2
-    `
+	// Используем подготовленный запрос как глобальную переменную
+	stmt, err := r.db.Prepare(`
+		SELECT 
+			images[$1],
+			image_types[$1]
+		FROM apartments
+		WHERE id = $2
+		AND array_length(images, 1) >= $1
+	`)
+	if err != nil {
+		return nil, "", fmt.Errorf("error preparing statement: %v", err)
+	}
+	defer stmt.Close()
 
 	var imageData []byte
 	var imageType string
 
-	err := r.db.QueryRow(query, index+1, apartmentID).Scan(&imageData, &imageType)
+	err = stmt.QueryRow(index+1, apartmentID).Scan(&imageData, &imageType)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, "", fmt.Errorf("apartment not found")
+			return nil, "", fmt.Errorf("image not found")
 		}
 		return nil, "", fmt.Errorf("error getting image: %v", err)
 	}
 
-	if imageData == nil {
-		return nil, "", fmt.Errorf("image not found")
-	}
+	// Сохраняем в кэш
+	utils.GetImageCache().Set(cacheKey, imageData, imageType)
 
-	fmt.Printf("Successfully retrieved image. Type: %s, Size: %d bytes\n", imageType, len(imageData)) // Для отладки
 	return imageData, imageType, nil
 }
 
@@ -368,18 +411,25 @@ func (r *ApartmentRepository) Delete(userID uint, apartmentID string) error {
 }
 
 func (r *ApartmentRepository) DeleteImage(userID uint, apartmentID string, index int) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("error starting transaction: %v", err)
+	}
+	defer tx.Rollback()
+
 	// Получаем текущие изображения
 	query := `
-        SELECT images, image_types, image_count
-        FROM apartments
-        WHERE id = $1 AND user_id = $2
-    `
+		SELECT images, image_types, COALESCE(image_count, 0)
+		FROM apartments
+		WHERE id = $1 AND user_id = $2
+		FOR UPDATE
+	`
 
 	var images [][]byte
 	var imageTypes []string
 	var imageCount int
 
-	err := r.db.QueryRow(query, apartmentID, userID).Scan(
+	err = tx.QueryRow(query, apartmentID, userID).Scan(
 		pq.Array(&images),
 		pq.Array(&imageTypes),
 		&imageCount,
@@ -399,14 +449,14 @@ func (r *ApartmentRepository) DeleteImage(userID uint, apartmentID string, index
 
 	// Обновляем запись в базе данных
 	updateQuery := `
-        UPDATE apartments
-        SET images = $1::bytea[],
-            image_types = $2::varchar[],
-            image_count = array_length($1::bytea[], 1)
-        WHERE id = $3 AND user_id = $4
-    `
+		UPDATE apartments
+		SET images = $1::bytea[],
+			image_types = $2::varchar[],
+			image_count = COALESCE(array_length($1::bytea[], 1), 0)
+		WHERE id = $3 AND user_id = $4
+	`
 
-	result, err := r.db.Exec(
+	result, err := tx.Exec(
 		updateQuery,
 		pq.Array(images),
 		pq.Array(imageTypes),
@@ -424,6 +474,14 @@ func (r *ApartmentRepository) DeleteImage(userID uint, apartmentID string, index
 
 	if rows == 0 {
 		return fmt.Errorf("apartment not found or not owned by user")
+	}
+
+	// Удаляем изображение из кэша
+	cacheKey := fmt.Sprintf("%s-%d", apartmentID, index)
+	utils.GetImageCache().Delete(cacheKey)
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("error committing transaction: %v", err)
 	}
 
 	return nil
@@ -456,25 +514,34 @@ func (r *ApartmentRepository) CreateAvailability(apartmentID uint, availability 
 }
 
 func (r *ApartmentRepository) ToggleActive(userID uint, apartmentID string) error {
+	// First verify ownership and get current status
+	var owner uint
+	var isActive bool
+	err := r.db.QueryRow("SELECT user_id, is_active FROM apartments WHERE id = $1", apartmentID).Scan(&owner, &isActive)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("apartment not found")
+		}
+		return fmt.Errorf("error checking apartment ownership: %v", err)
+	}
+
+	if owner != userID {
+		return fmt.Errorf("unauthorized: apartment does not belong to user")
+	}
+
+	// Toggle the status
 	query := `
         UPDATE apartments 
         SET is_active = NOT is_active,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = $1 AND user_id = $2
+        RETURNING is_active
     `
 
-	result, err := r.db.Exec(query, apartmentID, userID)
+	var newStatus bool
+	err = r.db.QueryRow(query, apartmentID, userID).Scan(&newStatus)
 	if err != nil {
 		return fmt.Errorf("error updating apartment status: %v", err)
-	}
-
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("error getting rows affected: %v", err)
-	}
-
-	if rows == 0 {
-		return fmt.Errorf("apartment not found or not owned by user")
 	}
 
 	return nil

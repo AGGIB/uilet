@@ -17,6 +17,7 @@ type Apartment struct {
 	Amenities      map[string]bool `json:"amenities" db:"amenities"`
 	Location       string          `json:"location" db:"location"`
 	Rules          string          `json:"rules" db:"rules"`
+	IsActive       bool            `json:"is_active" db:"is_active"`
 	CreatedAt      time.Time       `json:"created_at" db:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at" db:"updated_at"`
 	Images         [][]byte        `json:"-" db:"images"`
@@ -50,6 +51,7 @@ type UpdateApartmentInput struct {
 	Amenities      map[string]bool     `json:"amenities"`
 	Location       string              `json:"location"`
 	Rules          string              `json:"rules"`
+	IsActive       bool                `json:"is_active"`
 	Availabilities []AvailabilityInput `json:"availabilities"`
 }
 
@@ -62,4 +64,7 @@ type ApartmentRepository interface {
 	AddImages(userID uint, apartmentID string, imageData [][]byte, imageTypes []string) error
 	GetImage(apartmentID string, index int) ([]byte, string, error)
 	DeleteImage(userID uint, apartmentID string, index int) error
+	ToggleActive(userID uint, apartmentID string) error
+	DeleteAvailabilities(apartmentID uint) error
+	CreateAvailability(apartmentID uint, availability *Availability) error
 }
